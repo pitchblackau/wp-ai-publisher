@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { Globe, Sparkles, List, Activity, Zap } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { Globe, Sparkles, List, Activity, Zap, LogOut } from 'lucide-react';
 
 const nav = [
   { href: '/sites', label: 'Sites', icon: Globe },
@@ -13,6 +13,13 @@ const nav = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  async function logout() {
+    await fetch('/api/auth', { method: 'DELETE' });
+    router.push('/login');
+    router.refresh();
+  }
 
   return (
     <aside
@@ -51,8 +58,16 @@ export default function Sidebar() {
         })}
       </nav>
 
-      <div className="px-4 pb-4 text-xs" style={{ color: 'var(--text-dim)' }}>
-        v1.0.0
+      <div className="px-3 pb-3 flex flex-col gap-1">
+        <button
+          onClick={logout}
+          className="flex items-center gap-3 px-3 py-2 rounded-md text-sm w-full transition-colors hover:opacity-80"
+          style={{ color: 'var(--text-dim)' }}
+        >
+          <LogOut size={16} />
+          Sign out
+        </button>
+        <div className="px-3 text-xs" style={{ color: 'var(--text-dim)' }}>v1.0.0</div>
       </div>
     </aside>
   );
