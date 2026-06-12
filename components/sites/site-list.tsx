@@ -118,7 +118,7 @@ export default function SiteList() {
       <table className="w-full text-sm">
         <thead>
           <tr style={{ borderBottom: `1px solid var(--border)` }}>
-            {['#', 'Name', 'URL', 'Username', 'Status', 'Last checked', ''].map((h) => (
+            {['No.', 'Name', 'URL', 'Username', 'Status', 'Last checked', ''].map((h) => (
               <th key={h} className="px-4 py-3 text-left text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
                 {h}
               </th>
