@@ -5,7 +5,7 @@ const JWT_SECRET = new TextEncoder().encode(
   process.env.AUTH_JWT_SECRET ?? 'wp-publisher-fallback-secret'
 );
 
-const PUBLIC_PATHS = ['/login', '/api/auth', '/api/cron', '/_next', '/favicon.ico'];
+const PUBLIC_PATHS = ['/login', '/api/auth', '/api/cron', '/api/debug', '/_next', '/favicon.ico'];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
