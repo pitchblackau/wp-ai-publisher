@@ -13,14 +13,14 @@ const SESSION_MAX_AGE = 60 * 60 * 24 * SESSION_DAYS;
 export async function POST(req: NextRequest) {
   const { username, password } = await req.json();
 
-  const validUsername = process.env.ADMIN_USERNAME;
-  const validPassword = process.env.ADMIN_PASSWORD;
+  const validUsername = process.env.ADMIN_USERNAME?.replace(/^﻿/, '').trim();
+  const validPassword = process.env.ADMIN_PASSWORD?.replace(/^﻿/, '').trim();
 
   if (
     !validUsername ||
     !validPassword ||
-    username !== validUsername ||
-    password !== validPassword
+    username.trim() !== validUsername ||
+    password.trim() !== validPassword
   ) {
     return NextResponse.json({ error: 'Invalid username or password' }, { status: 401 });
   }
