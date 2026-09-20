@@ -61,6 +61,9 @@ export async function testConnection(config: WPAuthConfig): Promise<{ ok: boolea
       if (code === 'rest_invalid_credentials' || code === 'invalid_username' || code === 'incorrect_password') {
         return { ok: false, message: 'Wrong username or Application Password — generate one under WP Admin → Users → Profile → Application Passwords' };
       }
+      if (code === 'rest_not_logged_in') {
+        return { ok: false, message: 'Application Passwords are disabled on this site. Install the Basic Auth plugin or add `add_filter(\'wp_is_application_passwords_available\', \'__return_true\')` to functions.php' };
+      }
       const detail = wpMessage || code || '401';
       return { ok: false, message: `Authentication failed: ${detail}` };
     }
