@@ -29,7 +29,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { name, url, login_url, wp_username, wp_password } = parsed.data;
+  const { name, url, login_url, wp_username } = parsed.data;
+  const wp_password = parsed.data.wp_password.replace(/\s/g, '');
 
   const test = await testConnection({ url, username: wp_username, password: wp_password });
 

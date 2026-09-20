@@ -23,9 +23,7 @@ export default function AddSiteButton() {
     if (res.ok) {
       setResult({ ok: data.connection.ok, message: data.connection.message });
       window.dispatchEvent(new Event('sites-updated'));
-      if (data.connection.ok) {
-        setTimeout(() => { setOpen(false); setForm({ name: '', url: '', login_url: '', wp_username: '', wp_password: '' }); setResult(null); }, 1500);
-      }
+      setTimeout(() => { setOpen(false); setForm({ name: '', url: '', login_url: '', wp_username: '', wp_password: '' }); setResult(null); }, 1800);
     } else {
       setResult({ ok: false, message: data.error?.formErrors?.[0] ?? data.error ?? 'Failed to add site' });
     }

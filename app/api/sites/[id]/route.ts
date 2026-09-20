@@ -24,7 +24,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (parsed.data.url) updates.url = parsed.data.url;
   if ('login_url' in parsed.data) updates.login_url = parsed.data.login_url || null;
   if (parsed.data.wp_username) updates.wp_username = parsed.data.wp_username;
-  if (parsed.data.wp_password) updates.wp_password_encrypted = encrypt(parsed.data.wp_password);
+  if (parsed.data.wp_password) updates.wp_password_encrypted = encrypt(parsed.data.wp_password.replace(/\s/g, ''));
 
   const { data, error } = await supabase
     .from('sites')
