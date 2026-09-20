@@ -36,10 +36,18 @@ export async function testConnection(config: WPAuthConfig): Promise<{ ok: boolea
     }
 
     if (res.status === 401) {
-      return { ok: false, message: 'Authentication failed — check username and Application Password' };
+      let code = '';
+      try { code = (await res.json()).code ?? ''; } catch { /* ignore */ }
+      if (code === 'application_passwords_disabled' || code === 'application_passwords_disabled_for_user') {
+        return { ok: false, message: 'Application Passwords are disabled on this site — enable them in WP Settings or check your security plugin' };
+      }
+      if (code === 'rest_invalid_credentials' || code === 'invalid_username' || code === 'incorrect_password') {
+        return { ok: false, message: 'Wrong username or Application Password — use the password from WP Profile → Application Passwords, not your login password' };
+      }
+      return { ok: false, message: `Authentication failed (${code || '401'}) — check username and Application Password` };
     }
     if (res.status === 403) {
-      return { ok: false, message: 'Access denied — ensure the user has the Editor or Administrator role' };
+      return { ok: false, message: 'Access denied — ensure the user has Editor or Administrator role' };
     }
     if (res.status === 404) {
       return { ok: false, message: 'REST API not found — confirm the site URL is correct and permalinks are enabled' };
