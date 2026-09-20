@@ -4,6 +4,11 @@ export interface WPAuthConfig {
   password: string;
 }
 
+export interface WPPluginConfig {
+  url: string;
+  pluginKey: string;
+}
+
 function authHeader(config: WPAuthConfig): string {
   return `Basic ${Buffer.from(`${config.username}:${config.password}`).toString('base64')}`;
 }
@@ -12,8 +17,57 @@ function baseUrl(url: string): string {
   return url.replace(/\/$/, '');
 }
 
+// ── Plugin-based auth (pb-publisher plugin) ───────────────────────────────────
+
+export async function testConnectionPlugin(config: WPPluginConfig): Promise<{ ok: boolean; message: string }> {
+  try {
+    const res = await fetch(`${baseUrl(config.url)}/wp-json/pb-publisher/v1/status`, {
+      headers: { 'X-PB-Key': config.pluginKey },
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      return { ok: true, message: `Connected to "${data.site_name}"` };
+    }
+    if (res.status === 401 || res.status === 403) {
+      return { ok: false, message: 'Invalid plugin key — check the key under WP Admin → Settings → PB Publisher' };
+    }
+    if (res.status === 404) {
+      return { ok: false, message: 'Plugin not found — make sure the Pitch Black Publisher plugin is installed and active' };
+    }
+    return { ok: false, message: `Plugin connection failed: ${res.status}` };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, message: `Cannot reach site: ${msg}` };
+  }
+}
+
+export async function publishPostPlugin(
+  config: WPPluginConfig,
+  payload: WPPostPayload
+): Promise<{ ok: boolean; postId?: number; postUrl?: string; error?: string }> {
+  try {
+    const res = await fetch(`${baseUrl(config.url)}/wp-json/pb-publisher/v1/posts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-PB-Key': config.pluginKey },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return { ok: true, postId: data.post_id, postUrl: data.url };
+    }
+    const errText = await res.text();
+    return { ok: false, error: `${res.status}: ${errText}` };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// ── Application Password auth (fallback for sites without plugin) ─────────────
+
 async function tryAuth(url: string, config: WPAuthConfig): Promise<Response> {
-  // First try: Authorization header (standard)
   const res = await fetch(url, {
     headers: { Authorization: authHeader(config) },
     redirect: 'follow',
@@ -21,7 +75,7 @@ async function tryAuth(url: string, config: WPAuthConfig): Promise<Response> {
   });
   if (res.status !== 401) return res;
 
-  // Second try: credentials in URL — works when host strips Authorization header (Apache CGI/FastCGI)
+  // Fallback: credentials in URL for hosts that strip Authorization header
   const parsed = new URL(url);
   parsed.username = encodeURIComponent(config.username);
   parsed.password = encodeURIComponent(config.password);
@@ -56,13 +110,13 @@ export async function testConnection(config: WPAuthConfig): Promise<{ ok: boolea
       let wpMessage = '';
       try { const j = await res.json(); code = j.code ?? ''; wpMessage = j.message ?? ''; } catch { /* ignore */ }
       if (code === 'application_passwords_disabled' || code === 'application_passwords_disabled_for_user') {
-        return { ok: false, message: 'Application Passwords are disabled on this site — enable them under WP Admin → Users → Profile' };
+        return { ok: false, message: 'Application Passwords are disabled — install the PB Publisher plugin instead' };
+      }
+      if (code === 'rest_not_logged_in') {
+        return { ok: false, message: 'Application Passwords not available on this site — install the PB Publisher plugin instead' };
       }
       if (code === 'rest_invalid_credentials' || code === 'invalid_username' || code === 'incorrect_password') {
         return { ok: false, message: 'Wrong username or Application Password — generate one under WP Admin → Users → Profile → Application Passwords' };
-      }
-      if (code === 'rest_not_logged_in') {
-        return { ok: false, message: 'Application Passwords are disabled on this site. Install the Basic Auth plugin or add `add_filter(\'wp_is_application_passwords_available\', \'__return_true\')` to functions.php' };
       }
       const detail = wpMessage || code || '401';
       return { ok: false, message: `Authentication failed: ${detail}` };
@@ -90,6 +144,9 @@ export interface WPPostPayload {
   status: 'publish' | 'future' | 'draft';
   date?: string;
   meta?: Record<string, string>;
+  meta_description?: string;
+  tags?: string[];
+  category?: string;
 }
 
 export async function publishPost(
@@ -104,7 +161,6 @@ export async function publishPost(
       body,
       signal: AbortSignal.timeout(30000),
     });
-    // Fallback: embed credentials in URL if host strips Authorization header
     if (res.status === 401) {
       const parsed = new URL(`${baseUrl(config.url)}/wp-json/wp/v2/posts`);
       parsed.username = encodeURIComponent(config.username);

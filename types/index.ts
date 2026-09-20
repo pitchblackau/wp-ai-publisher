@@ -3,6 +3,7 @@ export interface Site {
   name: string;
   url: string;
   login_url: string | null;
+  plugin_key_encrypted: string | null;
   wp_username: string;
   wp_password_encrypted: string;
   status: 'active' | 'error' | 'unchecked';

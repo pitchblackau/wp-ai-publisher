@@ -7,6 +7,7 @@ const UpdateSiteSchema = z.object({
   name: z.string().min(1).optional(),
   url: z.string().url().optional(),
   login_url: z.string().optional(),
+  plugin_key: z.string().optional(),
   wp_username: z.string().min(1).optional(),
   wp_password: z.string().min(1).optional(),
 });
@@ -23,6 +24,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (parsed.data.name) updates.name = parsed.data.name;
   if (parsed.data.url) updates.url = parsed.data.url;
   if ('login_url' in parsed.data) updates.login_url = parsed.data.login_url || null;
+  if (parsed.data.plugin_key) updates.plugin_key_encrypted = encrypt(parsed.data.plugin_key);
   if (parsed.data.wp_username) updates.wp_username = parsed.data.wp_username;
   if (parsed.data.wp_password) updates.wp_password_encrypted = encrypt(parsed.data.wp_password.replace(/\s/g, ''));
 
@@ -30,7 +32,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .from('sites')
     .update(updates)
     .eq('id', id)
-    .select('id, name, url, login_url, wp_username, status, last_checked_at, last_error, created_at, updated_at')
+    .select('id, name, url, login_url, plugin_key_encrypted, wp_username, status, last_checked_at, last_error, created_at, updated_at')
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

@@ -46,6 +46,14 @@ create table if not exists publish_jobs (
   completed_at timestamptz
 );
 
+-- Row Level Security — all tables are server-side only (service role key bypasses RLS)
+alter table sites enable row level security;
+alter table articles enable row level security;
+alter table publish_jobs enable row level security;
+
+-- No anon/authenticated access — only the service role key (used server-side) can read/write
+-- (service role always bypasses RLS, so no explicit policy needed for it)
+
 -- Updated_at triggers
 create or replace function update_updated_at()
 returns trigger as $$
@@ -53,7 +61,7 @@ begin
   new.updated_at = now();
   return new;
 end;
-$$ language plpgsql;
+$$ language plpgsql security definer set search_path = '';
 
 create trigger sites_updated_at before update on sites
   for each row execute function update_updated_at();
