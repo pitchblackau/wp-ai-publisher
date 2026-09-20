@@ -5,7 +5,7 @@ import { Plus, X, Check, AlertCircle, Loader2 } from 'lucide-react';
 
 export default function AddSiteButton() {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: '', url: '', wp_username: '', wp_password: '' });
+  const [form, setForm] = useState({ name: '', url: '', login_url: '', wp_username: '', wp_password: '' });
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
 
@@ -24,7 +24,7 @@ export default function AddSiteButton() {
       setResult({ ok: data.connection.ok, message: data.connection.message });
       window.dispatchEvent(new Event('sites-updated'));
       if (data.connection.ok) {
-        setTimeout(() => { setOpen(false); setForm({ name: '', url: '', wp_username: '', wp_password: '' }); setResult(null); }, 1500);
+        setTimeout(() => { setOpen(false); setForm({ name: '', url: '', login_url: '', wp_username: '', wp_password: '' }); setResult(null); }, 1500);
       }
     } else {
       setResult({ ok: false, message: data.error?.formErrors?.[0] ?? data.error ?? 'Failed to add site' });
@@ -57,11 +57,12 @@ export default function AddSiteButton() {
 
             <form onSubmit={submit} className="flex flex-col gap-4">
               {[
-                { key: 'name', label: 'Site Name', placeholder: 'My Blog', type: 'text' },
-                { key: 'url', label: 'WordPress URL', placeholder: 'https://example.com', type: 'url' },
-                { key: 'wp_username', label: 'WP Username', placeholder: 'admin', type: 'text' },
-                { key: 'wp_password', label: 'Application Password', placeholder: 'xxxx xxxx xxxx xxxx', type: 'password' },
-              ].map(({ key, label, placeholder, type }) => (
+                { key: 'name', label: 'Site Name', placeholder: 'My Blog', type: 'text', required: true },
+                { key: 'url', label: 'WordPress URL', placeholder: 'https://example.com', type: 'url', required: true },
+                { key: 'login_url', label: 'Login URL (optional)', placeholder: '/no-pasaran', type: 'text', required: false },
+                { key: 'wp_username', label: 'WP Username', placeholder: 'admin', type: 'text', required: true },
+                { key: 'wp_password', label: 'Application Password', placeholder: 'xxxx xxxx xxxx xxxx', type: 'password', required: true },
+              ].map(({ key, label, placeholder, type, required }) => (
                 <div key={key} className="flex flex-col gap-1.5">
                   <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{label}</label>
                   <input
@@ -69,7 +70,7 @@ export default function AddSiteButton() {
                     placeholder={placeholder}
                     value={form[key as keyof typeof form]}
                     onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-                    required
+                    required={required}
                     className="w-full px-3 py-2 rounded-md text-sm border outline-none focus:ring-1"
                     style={{
                       background: 'var(--surface-2)',

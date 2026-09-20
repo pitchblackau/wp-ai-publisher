@@ -7,6 +7,7 @@ import { z } from 'zod';
 const CreateSiteSchema = z.object({
   name: z.string().min(1),
   url: z.string().url(),
+  login_url: z.string().optional(),
   wp_username: z.string().min(1),
   wp_password: z.string().min(1),
 });
@@ -14,7 +15,7 @@ const CreateSiteSchema = z.object({
 export async function GET() {
   const { data, error } = await supabase
     .from('sites')
-    .select('id, name, url, wp_username, status, last_checked_at, last_error, created_at, updated_at')
+    .select('id, name, url, login_url, wp_username, status, last_checked_at, last_error, created_at, updated_at')
     .order('created_at', { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { name, url, wp_username, wp_password } = parsed.data;
+  const { name, url, login_url, wp_username, wp_password } = parsed.data;
 
   const test = await testConnection({ url, username: wp_username, password: wp_password });
 
@@ -39,13 +40,14 @@ export async function POST(req: NextRequest) {
     .insert({
       name,
       url,
+      login_url: login_url || null,
       wp_username,
       wp_password_encrypted: encrypted,
       status: test.ok ? 'active' : 'error',
       last_checked_at: new Date().toISOString(),
       last_error: test.ok ? null : test.message,
     })
-    .select('id, name, url, wp_username, status, last_checked_at, last_error, created_at, updated_at')
+    .select('id, name, url, login_url, wp_username, status, last_checked_at, last_error, created_at, updated_at')
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

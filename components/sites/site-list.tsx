@@ -8,6 +8,7 @@ interface Site {
   id: string;
   name: string;
   url: string;
+  login_url: string | null;
   wp_username: string;
   status: 'active' | 'error' | 'unchecked';
   last_checked_at: string | null;
@@ -17,6 +18,7 @@ interface Site {
 interface EditForm {
   name: string;
   url: string;
+  login_url: string;
   wp_username: string;
   wp_password: string;
 }
@@ -33,7 +35,7 @@ export default function SiteList() {
   const [testing, setTesting] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<EditForm>({ name: '', url: '', wp_username: '', wp_password: '' });
+  const [editForm, setEditForm] = useState<EditForm>({ name: '', url: '', login_url: '', wp_username: '', wp_password: '' });
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -51,7 +53,7 @@ export default function SiteList() {
   }, [load]);
 
   function openEdit(site: Site) {
-    setEditForm({ name: site.name, url: site.url, wp_username: site.wp_username, wp_password: '' });
+    setEditForm({ name: site.name, url: site.url, login_url: site.login_url ?? '', wp_username: site.wp_username, wp_password: '' });
     setEditingId(site.id);
   }
 
@@ -61,6 +63,7 @@ export default function SiteList() {
     const body: Record<string, string> = {
       name: editForm.name,
       url: editForm.url,
+      login_url: editForm.login_url,
       wp_username: editForm.wp_username,
     };
     if (editForm.wp_password) body.wp_password = editForm.wp_password;
@@ -118,7 +121,7 @@ export default function SiteList() {
       <table className="w-full text-sm">
         <thead>
           <tr style={{ borderBottom: `1px solid var(--border)` }}>
-            {['No.', 'Name', 'URL', 'Username', 'Status', 'Last checked', ''].map((h) => (
+            {['No.', 'Name', 'URL', 'Login URL', 'Username', 'Status', 'Last checked', ''].map((h) => (
               <th key={h} className="px-4 py-3 text-left text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
                 {h}
               </th>
@@ -165,6 +168,25 @@ export default function SiteList() {
                       <ExternalLink size={10} />
                     </a>
                   )}
+                </td>
+
+                {/* Login URL */}
+                <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+                  {isEditing ? (
+                    <input
+                      value={editForm.login_url}
+                      onChange={e => setEditForm({ ...editForm, login_url: e.target.value })}
+                      className="px-2 py-1 rounded border text-xs w-full outline-none"
+                      style={inputStyle}
+                      placeholder="/wp-admin"
+                    />
+                  ) : site.login_url ? (
+                    <a href={`${site.url.replace(/\/$/, '')}${site.login_url}`} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-1 hover:underline" style={{ color: 'var(--text-muted)' }}>
+                      {site.login_url}
+                      <ExternalLink size={10} />
+                    </a>
+                  ) : <span style={{ color: 'var(--text-dim)' }}>—</span>}
                 </td>
 
                 {/* Username */}

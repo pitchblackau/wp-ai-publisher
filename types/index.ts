@@ -2,6 +2,7 @@ export interface Site {
   id: string;
   name: string;
   url: string;
+  login_url: string | null;
   wp_username: string;
   wp_password_encrypted: string;
   status: 'active' | 'error' | 'unchecked';
