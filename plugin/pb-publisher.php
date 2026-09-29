@@ -3,7 +3,7 @@
  * Plugin Name: Pitch Black Publisher
  * Plugin URI:  https://pitchblack.au
  * Description: Secure REST API bridge for WP AI Publisher â€” manage posts, pages, media and site content remotely.
- * Version:     1.1.0
+ * Version:     1.1.1
  * Author:      Pitch Black
  * License:     GPL-2.0-or-later
  * Update URI:  https://raw.githubusercontent.com/pitchblackau/wp-ai-publisher/master/plugin/update.json
@@ -11,7 +11,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'PB_PUBLISHER_VERSION',    '1.1.0' );
+define( 'PB_PUBLISHER_VERSION',    '1.1.1' );
 define( 'PB_PUBLISHER_KEY_OPTION', 'pb_publisher_secret_key' );
 define( 'PB_PUBLISHER_UPDATE_URL', 'https://raw.githubusercontent.com/pitchblackau/wp-ai-publisher/master/plugin/update.json' );
 
@@ -163,8 +163,22 @@ function pb_publisher_insert_or_update_post( int $existing_id, array $p, string 
     if ( $post_type === 'post' ) {
         if ( ! empty( $p['tags'] ) )     $data['tags_input']    = array_map( 'sanitize_text_field', (array) $p['tags'] );
         if ( ! empty( $p['category'] ) ) {
-            $cat = get_category_by_slug( sanitize_key( $p['category'] ) );
-            if ( $cat ) $data['post_category'] = [ $cat->term_id ];
+            $cat_name = sanitize_text_field( $p['category'] );
+            // sanitize_key() (lowercase + underscores) never matches a real category
+            // slug (hyphenated), so this used to silently fail and posts fell back to
+            // "Uncategorized". Match by name first, then slug, then create it.
+            $term = get_term_by( 'name', $cat_name, 'category' );
+            if ( ! $term ) {
+                $term = get_term_by( 'slug', sanitize_title( $cat_name ), 'category' );
+            }
+            if ( ! $term ) {
+                $inserted = wp_insert_term( $cat_name, 'category' );
+                if ( ! is_wp_error( $inserted ) ) {
+                    $data['post_category'] = [ (int) $inserted['term_id'] ];
+                }
+            } else {
+                $data['post_category'] = [ (int) $term->term_id ];
+            }
         }
     }
 
