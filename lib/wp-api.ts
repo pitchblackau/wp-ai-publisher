@@ -139,6 +139,21 @@ export async function listMediaPlugin(
 
 // ── Internal helpers ───────────────────────────────────────────────────────────
 
+// A non-2xx from a WP site is sometimes a real PHP fatal error rendered as an HTML
+// page (a plugin/theme hook crashing), not a REST error — surface that plainly
+// instead of dumping the raw HTML page into the error message.
+async function summarizeWpError(res: Response): Promise<string> {
+  const text = await res.text();
+  const isHtml = (res.headers.get('content-type') ?? '').includes('html') || text.trim().startsWith('<');
+  if (isHtml) {
+    const looksFatal = /critical error|fatal error/i.test(text);
+    return looksFatal
+      ? `${res.status}: WordPress hit a fatal error processing this request (likely a plugin/theme conflict on that site) — check the site's PHP error log`
+      : `${res.status}: Site returned an HTML page instead of a REST response — check the site is reachable and the REST API isn't being blocked`;
+  }
+  return `${res.status}: ${text.slice(0, 500)}`;
+}
+
 function pluginFetch(config: WPPluginConfig, path: string, method: string, body?: unknown): Promise<Response> {
   return fetch(`${baseUrl(config.url)}${path}`, {
     method,
@@ -156,7 +171,7 @@ async function pluginPost(
   try {
     const res = await pluginFetch(config, path, 'POST', body);
     if (res.ok) { const d = await res.json(); return { ok: true, postId: d.post_id, postUrl: d.url }; }
-    return { ok: false, error: `${res.status}: ${await res.text()}` };
+    return { ok: false, error: await summarizeWpError(res) };
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
 }
 
@@ -166,7 +181,7 @@ async function pluginPatch(
   try {
     const res = await pluginFetch(config, path, 'PATCH', body);
     if (res.ok) { const d = await res.json(); return { ok: true, postId: d.post_id, postUrl: d.url }; }
-    return { ok: false, error: `${res.status}: ${await res.text()}` };
+    return { ok: false, error: await summarizeWpError(res) };
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
 }
 
@@ -176,7 +191,7 @@ async function pluginDelete(
   try {
     const res = await pluginFetch(config, path, 'DELETE');
     if (res.ok) return { ok: true };
-    return { ok: false, error: `${res.status}: ${await res.text()}` };
+    return { ok: false, error: await summarizeWpError(res) };
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
 }
 
@@ -309,13 +324,16 @@ export async function deletePost(
   postId: number
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    const res = await fetch(`${baseUrl(config.url)}/wp-json/wp/v2/posts/${postId}?force=true`, {
+    // Trash, not force-delete — a hard delete triggers more cleanup hooks and is
+    // more likely to hit a broken plugin/theme hook (a real PHP fatal error on
+    // the site itself, not something this app can catch or retry around).
+    const res = await fetch(`${baseUrl(config.url)}/wp-json/wp/v2/posts/${postId}`, {
       method: 'DELETE',
       headers: { Authorization: authHeader(config) },
       signal: AbortSignal.timeout(30000),
     });
     if (res.ok) return { ok: true };
-    return { ok: false, error: `${res.status}: ${await res.text()}` };
+    return { ok: false, error: await summarizeWpError(res) };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }

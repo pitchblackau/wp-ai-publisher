@@ -3,7 +3,7 @@
  * Plugin Name: Pitch Black Publisher
  * Plugin URI:  https://pitchblack.au
  * Description: Secure REST API bridge for WP AI Publisher â€” manage posts, pages, media and site content remotely.
- * Version:     1.1.1
+ * Version:     1.1.2
  * Author:      Pitch Black
  * License:     GPL-2.0-or-later
  * Update URI:  https://raw.githubusercontent.com/pitchblackau/wp-ai-publisher/master/plugin/update.json
@@ -11,7 +11,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'PB_PUBLISHER_VERSION',    '1.1.1' );
+define( 'PB_PUBLISHER_VERSION',    '1.1.2' );
 define( 'PB_PUBLISHER_KEY_OPTION', 'pb_publisher_secret_key' );
 define( 'PB_PUBLISHER_UPDATE_URL', 'https://raw.githubusercontent.com/pitchblackau/wp-ai-publisher/master/plugin/update.json' );
 
@@ -109,10 +109,12 @@ function pb_publisher_update_post( WP_REST_Request $req ) {
 }
 
 function pb_publisher_delete_post( WP_REST_Request $req ) {
-    $id     = (int) $req->get_param( 'id' );
-    $result = wp_delete_post( $id, true );
-    if ( ! $result ) return new WP_Error( 'delete_failed', 'Could not delete post', [ 'status' => 500 ] );
-    return rest_ensure_response( [ 'ok' => true, 'deleted_id' => $id ] );
+    $id = (int) $req->get_param( 'id' );
+    // Trash, not force-delete: some sites run plugins/themes whose cleanup hooks
+    // crash on a hard delete (fatal error on the site), and trash is reversible.
+    $result = wp_trash_post( $id );
+    if ( ! $result ) return new WP_Error( 'delete_failed', 'Could not trash post', [ 'status' => 500 ] );
+    return rest_ensure_response( [ 'ok' => true, 'deleted_id' => $id, 'trashed' => true ] );
 }
 
 // â”€â”€â”€ Pages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -135,9 +137,9 @@ function pb_publisher_update_page( WP_REST_Request $req ) {
 
 function pb_publisher_delete_page( WP_REST_Request $req ) {
     $id     = (int) $req->get_param( 'id' );
-    $result = wp_delete_post( $id, true );
-    if ( ! $result ) return new WP_Error( 'delete_failed', 'Could not delete page', [ 'status' => 500 ] );
-    return rest_ensure_response( [ 'ok' => true, 'deleted_id' => $id ] );
+    $result = wp_trash_post( $id );
+    if ( ! $result ) return new WP_Error( 'delete_failed', 'Could not trash page', [ 'status' => 500 ] );
+    return rest_ensure_response( [ 'ok' => true, 'deleted_id' => $id, 'trashed' => true ] );
 }
 
 // â”€â”€â”€ Shared post/page upsert â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
