@@ -70,7 +70,7 @@ export default function ArticleEditor({ id }: Props) {
     setArticle({ ...article, image_plan: (article.image_plan ?? []).map(p => (p.n === n ? { ...p, ...patch } : p)) });
   }
 
-  async function generateImages(only?: number[], force = false, base?: Article) {
+  async function generateImages(only?: number[], force = false, base?: Article, optimise = false) {
     const current = base ?? article;
     if (!current) return;
     setImgBusy(only?.length === 1 ? only[0] : 'all');
@@ -83,7 +83,7 @@ export default function ArticleEditor({ id }: Props) {
     const res = await fetch(`/api/articles/${id}/images`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ only, force }),
+      body: JSON.stringify({ only, force, optimise }),
     });
     const data = await res.json().catch(() => ({}));
     setImgBusy(null);
@@ -365,6 +365,18 @@ export default function ArticleEditor({ id }: Props) {
               >
                 {imgBusy === 'all' ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
                 Generate missing
+              </button>
+            )}
+            {(article.image_plan ?? []).some(p => p.url) && (
+              <button
+                onClick={() => generateImages(undefined, false, undefined, true)}
+                disabled={imgBusy !== null}
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md transition-opacity hover:opacity-80 disabled:opacity-50"
+                style={{ background: 'var(--surface-2)', color: 'var(--text-muted)' }}
+                title="Shrink existing images to 50 KB (hero 75 KB), max 800×600 — no regeneration"
+              >
+                {imgBusy === 'all' ? <Loader2 size={12} className="animate-spin" /> : null}
+                Optimise sizes
               </button>
             )}
             <button

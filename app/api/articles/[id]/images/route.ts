@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { generateAndStore, imageFigure, imagesConfigured } from '@/lib/images';
+import { generateAndStore, imageFigure, imagesConfigured, recompressStored } from '@/lib/images';
 import type { ImagePlanItem } from '@/types';
 
 export const maxDuration = 300;
@@ -11,12 +11,30 @@ export const maxDuration = 300;
 //  - force:   regenerate even if a picture already exists (replaces it in the body)
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const opts = await req.json().catch(() => ({})) as { only?: number[]; force?: boolean };
+  const opts = await req.json().catch(() => ({})) as { only?: number[]; force?: boolean; optimise?: boolean };
 
   const { data: article, error } = await supabase.from('articles').select('id, body, image_plan').eq('id', id).single();
   if (error || !article) return NextResponse.json({ error: 'Article not found' }, { status: 404 });
 
   const plan: ImagePlanItem[] = article.image_plan ?? [];
+
+  if (opts.optimise) {
+    const targets = plan.filter(p => p.url);
+    const out = await Promise.allSettled(targets.map(p => recompressStored(id, p.n, p.url!)));
+    let body: string = article.body;
+    const errs: string[] = [];
+    out.forEach((r, i) => {
+      const item = targets[i];
+      if (r.status === 'fulfilled') {
+        body = body.split(item.url!).join(r.value);
+        item.url = r.value;
+      } else errs.push(`Image ${item.n}: ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`);
+    });
+    const { data: updated, error: upErr } = await supabase
+      .from('articles').update({ body, image_plan: plan }).eq('id', id).select('*').single();
+    if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 });
+    return NextResponse.json({ generated: out.length - errs.length, failed: errs.length, errors: errs, article: updated });
+  }
   const pending = plan.filter(p => (!opts.only || opts.only.includes(p.n)) && (opts.force || !p.url));
   if (!pending.length) return NextResponse.json({ generated: 0, failed: 0 });
 
