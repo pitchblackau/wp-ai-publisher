@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { FileText, Trash2, Send, Loader2, Pencil, Clock, ExternalLink } from 'lucide-react';
+import { FileText, Trash2, Send, Loader2, Pencil, Clock, ExternalLink, RotateCcw } from 'lucide-react';
 import Badge from '@/components/ui/badge';
 import type { Article } from '@/types';
 
@@ -30,6 +30,7 @@ export default function QueueList() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
   const [publishingId, setPublishingId] = useState<string | null>(null);
+  const [redoingId, setRedoingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -91,6 +92,14 @@ export default function QueueList() {
     });
     await load();
     setPublishingId(null);
+  }
+
+  async function deleteAndRedo(article: Article) {
+    if (!confirm(`Remove "${article.title || 'this article'}" from every published site and move it back to draft? This cannot be undone on the WordPress side.`)) return;
+    setRedoingId(article.id);
+    await fetch(`/api/articles/${article.id}/publish`, { method: 'DELETE' });
+    await load();
+    setRedoingId(null);
   }
 
   if (loading) return <div className="py-20 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Loading…</div>;
@@ -242,6 +251,16 @@ export default function QueueList() {
                           >
                             <Pencil size={12} /> View
                           </Link>
+                          <button
+                            onClick={() => deleteAndRedo(article)}
+                            disabled={redoingId === article.id}
+                            className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md transition-opacity hover:opacity-80 disabled:opacity-50"
+                            style={{ background: '#ef444420', color: '#f87171' }}
+                            title="Remove from every site and move back to draft"
+                          >
+                            {redoingId === article.id ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />}
+                            Delete & Redo
+                          </button>
                         </>
                       )}
                     </div>

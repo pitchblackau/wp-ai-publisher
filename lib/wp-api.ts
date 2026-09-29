@@ -304,6 +304,23 @@ export async function publishPost(
   }
 }
 
+export async function deletePost(
+  config: WPAuthConfig,
+  postId: number
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${baseUrl(config.url)}/wp-json/wp/v2/posts/${postId}?force=true`, {
+      method: 'DELETE',
+      headers: { Authorization: authHeader(config) },
+      signal: AbortSignal.timeout(30000),
+    });
+    if (res.ok) return { ok: true };
+    return { ok: false, error: `${res.status}: ${await res.text()}` };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 export async function checkHealth(url: string): Promise<{ ok: boolean; message: string }> {
   try {
     const res = await fetch(`${baseUrl(url)}/wp-json/wp/v2`, {

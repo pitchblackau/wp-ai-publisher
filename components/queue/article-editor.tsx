@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Save, Send, Clock, Loader2, CheckCircle, AlertCircle, Eye, Code2, ExternalLink } from 'lucide-react';
+import { Save, Send, Clock, Loader2, CheckCircle, AlertCircle, Eye, Code2, ExternalLink, RotateCcw, Trash2, Sparkles } from 'lucide-react';
 import type { Article } from '@/types';
 import Badge from '@/components/ui/badge';
 
@@ -17,6 +17,8 @@ export default function ArticleEditor({ id }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [removingSite, setRemovingSite] = useState<string | null>(null);
   const [view, setView] = useState<'preview' | 'html'>('preview');
   const [scheduledAt, setScheduledAt] = useState('');
   const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(null);
@@ -84,6 +86,65 @@ export default function ArticleEditor({ id }: Props) {
     setTimeout(() => setNotice(null), 5000);
   }
 
+  async function regenerate() {
+    if (!confirm('Regenerate this article with Claude? The current title, content, and tags will be replaced (topic, tone and length stay the same).')) return;
+    setRegenerating(true);
+    const res = await fetch(`/api/articles/${id}/regenerate`, { method: 'POST' });
+    const data = await res.json();
+    setRegenerating(false);
+    if (res.ok) {
+      setArticle(data);
+      setJobs([]);
+      setNotice({ ok: true, message: 'Regenerated' });
+      if (data.image_plan?.length) {
+        fetch(`/api/articles/${id}/images`, { method: 'POST' }).then(() =>
+          fetch(`/api/articles/${id}`).then(r => r.json()).then(setArticle)
+        );
+      }
+    } else {
+      setNotice({ ok: false, message: data.error ?? 'Regeneration failed' });
+    }
+    setTimeout(() => setNotice(null), 4000);
+  }
+
+  async function removeFromSite(siteId: string) {
+    if (!confirm('Remove the live post from this site? The article stays published on any other sites.')) return;
+    setRemovingSite(siteId);
+    const res = await fetch(`/api/articles/${id}/publish`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ site_id: siteId }),
+    });
+    const data = await res.json();
+    setRemovingSite(null);
+    if (res.ok) {
+      setJobs(jobs.filter(j => j.siteId !== siteId));
+      const updated = await fetch(`/api/articles/${id}`).then(r => r.json());
+      setArticle(updated);
+      setNotice({ ok: true, message: 'Removed from site' });
+    } else {
+      setNotice({ ok: false, message: data.error ?? 'Failed to remove' });
+    }
+    setTimeout(() => setNotice(null), 4000);
+  }
+
+  async function deleteAndRedo() {
+    if (!confirm('Remove the live post(s) from every site and move this article back to draft? This cannot be undone on the WordPress side.')) return;
+    setPublishing(true);
+    const res = await fetch(`/api/articles/${id}/publish`, { method: 'DELETE' });
+    const data = await res.json();
+    setPublishing(false);
+    if (res.ok) {
+      setJobs([]);
+      const updated = await fetch(`/api/articles/${id}`).then(r => r.json());
+      setArticle(updated);
+      setNotice({ ok: true, message: 'Removed from all sites — back to draft' });
+    } else {
+      setNotice({ ok: false, message: data.error ?? 'Failed to remove' });
+    }
+    setTimeout(() => setNotice(null), 4000);
+  }
+
   function toggleSite(siteId: string) {
     if (!article) return;
     const ids = article.site_ids.includes(siteId)
@@ -119,6 +180,18 @@ export default function ArticleEditor({ id }: Props) {
               {notice.message}
             </span>
           )}
+          {article.status !== 'published' && article.status !== 'scheduled' && (
+            <button
+              onClick={regenerate}
+              disabled={regenerating}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md transition-opacity hover:opacity-80 disabled:opacity-50"
+              style={{ background: 'var(--surface-2)', color: 'var(--text-muted)' }}
+              title="Re-run Claude on the same topic/tone/length"
+            >
+              {regenerating ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+              Regenerate
+            </button>
+          )}
           <button
             onClick={save}
             disabled={saving}
@@ -128,6 +201,18 @@ export default function ArticleEditor({ id }: Props) {
             {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
             Save draft
           </button>
+          {(article.status === 'published' || article.status === 'scheduled') && (
+            <button
+              onClick={deleteAndRedo}
+              disabled={publishing}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md transition-opacity hover:opacity-80 disabled:opacity-50"
+              style={{ background: '#ef444420', color: '#f87171' }}
+              title="Remove from every site and revert to draft"
+            >
+              {publishing ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />}
+              Delete & Redo
+            </button>
+          )}
         </div>
       </div>
 
@@ -303,9 +388,20 @@ export default function ArticleEditor({ id }: Props) {
                   {j.ok ? <CheckCircle size={12} style={{ color: '#4ade80' }} /> : <AlertCircle size={12} style={{ color: '#f87171' }} />}
                   <span style={{ color: 'var(--text)' }}>{site?.name ?? j.siteId}</span>
                   {j.ok && j.postUrl ? (
-                    <a href={j.postUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:underline" style={{ color: 'var(--accent-hover)' }}>
-                      View post <ExternalLink size={10} />
-                    </a>
+                    <>
+                      <a href={j.postUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:underline" style={{ color: 'var(--accent-hover)' }}>
+                        View post <ExternalLink size={10} />
+                      </a>
+                      <button
+                        onClick={() => removeFromSite(j.siteId)}
+                        disabled={removingSite === j.siteId}
+                        className="flex items-center gap-1 hover:underline disabled:opacity-50"
+                        style={{ color: '#f87171' }}
+                      >
+                        {removingSite === j.siteId ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />}
+                        Remove from this site
+                      </button>
+                    </>
                   ) : (
                     <span style={{ color: 'var(--text-dim)' }}>{j.error}</span>
                   )}
