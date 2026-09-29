@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { FileText, Trash2, Send, Loader2, Pencil, Clock, ExternalLink, RotateCcw, AlertCircle, CheckCircle } from 'lucide-react';
+import { FileText, Trash2, Send, Loader2, Pencil, Clock, ExternalLink, RotateCcw, AlertCircle, CheckCircle, RefreshCw } from 'lucide-react';
 import Badge from '@/components/ui/badge';
 import type { Article } from '@/types';
 
@@ -55,7 +55,23 @@ export default function QueueList() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  const [verifying, setVerifying] = useState(false);
+
+  const verify = useCallback(async (manual = false) => {
+    setVerifying(true);
+    const data = await fetch('/api/articles/verify', { method: 'POST' }).then(r => r.json()).catch(() => null);
+    setVerifying(false);
+    if (data?.reverted?.length) {
+      setNotice({ ok: true, message: `${data.reverted.length} article(s) no longer exist on WordPress and were moved back to draft.` });
+      setTimeout(() => setNotice(null), 10000);
+      await load();
+    } else if (manual) {
+      setNotice({ ok: true, message: 'Checked WordPress — all published articles are still live.' });
+      setTimeout(() => setNotice(null), 5000);
+    }
+  }, [load]);
+
+  useEffect(() => { load().then(() => verify()); }, [load, verify]);
 
   const siteName = (id: string) => sites.find(s => s.id === id)?.name ?? 'Unknown site';
 
@@ -154,6 +170,16 @@ export default function QueueList() {
           style={{ background: tab === 'published' ? 'var(--accent)' : 'transparent', color: tab === 'published' ? 'white' : 'var(--text-muted)' }}
         >
           Published ({published.length})
+        </button>
+        <button
+          onClick={() => verify(true)}
+          disabled={verifying}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs transition-opacity hover:opacity-80 disabled:opacity-50"
+          style={{ color: 'var(--text-muted)' }}
+          title="Check WordPress to confirm each published article is still live"
+        >
+          {verifying ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+          Check live status
         </button>
       </div>
 
