@@ -44,7 +44,7 @@ Requirements:
 Return only the JSON object, no markdown code blocks or other text.`;
 
   const message = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-5',
     max_tokens: 8000,
     messages: [{ role: 'user', content: prompt }],
   });
