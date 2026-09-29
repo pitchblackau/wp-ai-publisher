@@ -209,6 +209,17 @@ export default function ArticleEditor({ id }: Props) {
         </div>
       </div>
 
+      {article.removal_error && (
+        <div className="flex items-start gap-2 px-4 py-3 rounded-lg border text-xs" style={{ background: '#ef444415', borderColor: '#ef444440', color: '#f87171' }}>
+          <AlertCircle size={14} className="mt-0.5 shrink-0" />
+          <div className="flex flex-col gap-1">
+            <span className="font-semibold">The last attempt to remove this post failed — it may still be live.</span>
+            <span>{article.removal_error}</span>
+            <span style={{ color: 'var(--text-muted)' }}>Use Delete &amp; Redo to retry, or delete it directly in WordPress and then Delete &amp; Redo to reset it here.</span>
+          </div>
+        </div>
+      )}
+
       {/* Title */}
       <div className="flex flex-col gap-1.5">
         <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Title</label>

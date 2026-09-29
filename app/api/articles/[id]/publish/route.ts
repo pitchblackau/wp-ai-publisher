@@ -55,6 +55,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       status: isScheduled ? 'scheduled' : anyOk ? 'published' : 'draft',
       scheduled_at: isScheduled ? scheduled_at : null,
       published_at: !isScheduled && anyOk ? new Date().toISOString() : null,
+      removal_error: null,
     })
     .eq('id', id);
 
@@ -78,7 +79,19 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (jobsErr) return NextResponse.json({ error: jobsErr.message }, { status: 500 });
 
   const targetJobs = site_id ? (jobs ?? []).filter(j => j.site_id === site_id) : (jobs ?? []);
-  if (!targetJobs.length) return NextResponse.json({ error: 'No live post found to remove' }, { status: 404 });
+  if (!targetJobs.length) {
+    // The article is marked published/scheduled but no live post is on record (state drift,
+    // e.g. the record was lost or the post was removed by hand on WordPress). There is nothing
+    // to delete remotely, so don't leave the article stuck — reset it to draft.
+    if (!site_id) {
+      await supabase
+        .from('articles')
+        .update({ status: 'draft', published_at: null, scheduled_at: null, removal_error: null })
+        .eq('id', id);
+      return NextResponse.json({ results: [], revertedToDraft: true, note: 'No live post on record — reset to draft' });
+    }
+    return NextResponse.json({ error: 'No live post found on that site' }, { status: 404 });
+  }
 
   const { data: sites } = await supabase
     .from('sites')
@@ -94,20 +107,34 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     results.push({ siteId: job.site_id, ...result });
   }
 
+  const failures = results.filter(r => !r.ok);
   const anyRemoved = results.some(r => r.ok);
-  if (anyRemoved) {
-    const { count } = await supabase
-      .from('publish_jobs')
-      .select('id', { count: 'exact', head: true })
-      .eq('article_id', id)
-      .eq('status', 'success');
 
-    // Only revert to draft once every live copy is gone — a partial removal
-    // (one site out of several) should leave the article published on the rest.
-    if (!count) {
-      await supabase.from('articles').update({ status: 'draft', published_at: null, scheduled_at: null }).eq('id', id);
-    }
+  const { count: stillLive } = await supabase
+    .from('publish_jobs')
+    .select('id', { count: 'exact', head: true })
+    .eq('article_id', id)
+    .eq('status', 'success');
+
+  // Only revert to draft once every live copy is gone — a partial removal
+  // (one site out of several) should leave the article published on the rest.
+  if (!stillLive) {
+    await supabase
+      .from('articles')
+      .update({ status: 'draft', published_at: null, scheduled_at: null, removal_error: null })
+      .eq('id', id);
+  } else if (failures.length) {
+    // Persist the failure on the article itself: "Published" here only means our
+    // records say it's live, and a failed removal must not look like a healthy post.
+    const label = (siteId: string) => {
+      const url = sites?.find(s => s.id === siteId)?.url;
+      try { return url ? new URL(url).hostname : siteId; } catch { return url ?? siteId; }
+    };
+    const summary = failures.map(f => `${label(f.siteId)}: ${f.error ?? 'failed'}`).join(' | ');
+    await supabase.from('articles').update({ removal_error: summary }).eq('id', id);
+  } else if (anyRemoved) {
+    await supabase.from('articles').update({ removal_error: null }).eq('id', id);
   }
 
-  return NextResponse.json({ results, revertedToDraft: anyRemoved && targetJobs.length === (jobs ?? []).length });
+  return NextResponse.json({ results, revertedToDraft: !stillLive });
 }

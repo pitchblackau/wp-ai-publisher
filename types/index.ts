@@ -32,6 +32,7 @@ export interface Article {
   status: 'draft' | 'scheduled' | 'published' | 'discarded';
   scheduled_at: string | null;
   published_at: string | null;
+  removal_error: string | null;
   topic: string;
   tone: string;
   word_count_target: number;

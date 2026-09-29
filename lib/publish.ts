@@ -1,5 +1,5 @@
 import { decrypt } from '@/lib/crypto';
-import { deletePost, deletePostPlugin, publishPost, publishPostPlugin, uploadMediaPlugin } from '@/lib/wp-api';
+import { deletePost, deletePostPlugin, postPresence, postPresencePlugin, publishPost, publishPostPlugin, uploadMediaPlugin } from '@/lib/wp-api';
 import type { ImagePlanItem } from '@/types';
 
 export interface PublishSite {
@@ -95,12 +95,21 @@ export async function deletePostFromSite(site: PublishSite, wpPostId: number): P
   if (site.plugin_key_encrypted) {
     let pluginKey: string;
     try { pluginKey = decrypt(site.plugin_key_encrypted); } catch { return { ok: false, error: 'Decrypt failed' }; }
-    return deletePostPlugin({ url: site.url, pluginKey }, wpPostId);
+    const cfg = { url: site.url, pluginKey };
+    // Already gone (deleted by hand, or an earlier attempt removed it before erroring) counts as success.
+    if (await postPresencePlugin(cfg, wpPostId) === 'gone') return { ok: true };
+    const result = await deletePostPlugin(cfg, wpPostId);
+    if (!result.ok && await postPresencePlugin(cfg, wpPostId) === 'gone') return { ok: true };
+    return result;
   }
 
   if (!site.wp_username || !site.wp_password_encrypted) return { ok: false, error: 'Site has no credentials' };
   let password: string;
   try { password = decrypt(site.wp_password_encrypted); } catch { return { ok: false, error: 'Decrypt failed' }; }
 
-  return deletePost({ url: site.url, username: site.wp_username, password }, wpPostId);
+  const cfg = { url: site.url, username: site.wp_username, password };
+  if (await postPresence(cfg, wpPostId) === 'gone') return { ok: true };
+  const result = await deletePost(cfg, wpPostId);
+  if (!result.ok && await postPresence(cfg, wpPostId) === 'gone') return { ok: true };
+  return result;
 }

@@ -65,6 +65,38 @@ export async function deletePostPlugin(
   return pluginDelete(config, `/wp-json/pb-publisher/v1/posts/${postId}`);
 }
 
+// 'gone' = missing or already in the trash, 'exists' = live, 'unknown' = couldn't tell.
+export type PostPresence = 'gone' | 'exists' | 'unknown';
+
+export async function postPresencePlugin(config: WPPluginConfig, postId: number): Promise<PostPresence> {
+  try {
+    const res = await pluginFetch(config, `/wp-json/pb-publisher/v1/posts/${postId}`, 'GET');
+    if (res.status === 404) {
+      const j = await res.json().catch(() => null);
+      return j?.code === 'not_found' ? 'gone' : 'unknown';
+    }
+    if (!res.ok) return 'unknown';
+    const j = await res.json().catch(() => null);
+    return j?.status === 'trash' ? 'gone' : 'exists';
+  } catch { return 'unknown'; }
+}
+
+export async function postPresence(config: WPAuthConfig, postId: number): Promise<PostPresence> {
+  try {
+    const res = await fetch(`${baseUrl(config.url)}/wp-json/wp/v2/posts/${postId}?context=edit`, {
+      headers: { Authorization: authHeader(config) },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (res.status === 404) {
+      const j = await res.json().catch(() => null);
+      return j?.code === 'rest_post_invalid_id' ? 'gone' : 'unknown';
+    }
+    if (!res.ok) return 'unknown';
+    const j = await res.json().catch(() => null);
+    return j?.status === 'trash' ? 'gone' : 'exists';
+  } catch { return 'unknown'; }
+}
+
 export async function listPostsPlugin(
   config: WPPluginConfig,
   params?: { status?: string; per_page?: number; page?: number }

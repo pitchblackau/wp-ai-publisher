@@ -235,7 +235,15 @@ export default function QueueList() {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    {statusBadge(article.status)}
+                    {article.removal_error ? (
+                      <>
+                        <Badge label="Removal failed" variant="error" />
+                        <span className="flex items-start gap-1 text-xs mt-1 max-w-[260px]" style={{ color: '#f87171' }}>
+                          <AlertCircle size={11} className="mt-0.5 shrink-0" />
+                          <span>Post may still be live. {article.removal_error}</span>
+                        </span>
+                      </>
+                    ) : statusBadge(article.status)}
                     {article.status === 'scheduled' && article.scheduled_at && (
                       <span className="flex items-center gap-1 text-xs mt-1" style={{ color: 'var(--text-dim)' }}>
                         <Clock size={10} /> {new Date(article.scheduled_at).toLocaleString()}
