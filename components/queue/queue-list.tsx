@@ -2,9 +2,14 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { FileText, Trash2 } from 'lucide-react';
+import { FileText, Trash2, Send, Loader2, Pencil, Clock, ExternalLink } from 'lucide-react';
 import Badge from '@/components/ui/badge';
 import type { Article } from '@/types';
+
+interface Site { id: string; name: string; url: string; }
+interface PublishJob { siteId: string; ok: boolean; postUrl?: string; }
+
+type Tab = 'active' | 'published';
 
 function statusBadge(status: Article['status']) {
   const map = {
@@ -18,19 +23,39 @@ function statusBadge(status: Article['status']) {
 
 export default function QueueList() {
   const [articles, setArticles] = useState<Article[]>([]);
+  const [sites, setSites] = useState<Site[]>([]);
+  const [jobsByArticle, setJobsByArticle] = useState<Record<string, PublishJob[]>>({});
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<Tab>('active');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const res = await fetch('/api/articles');
-    const data = await res.json();
-    setArticles(Array.isArray(data) ? data : []);
+    const [a, s] = await Promise.all([
+      fetch('/api/articles').then(r => r.json()),
+      fetch('/api/sites').then(r => r.json()),
+    ]);
+    const articleList: Article[] = Array.isArray(a) ? a : [];
+    setArticles(articleList);
+    setSites(Array.isArray(s) ? s : []);
+
+    const publishedIds = articleList.filter(x => x.status === 'published').map(x => x.id);
+    if (publishedIds.length) {
+      const jobLists = await Promise.all(
+        publishedIds.map(id => fetch(`/api/articles/${id}/jobs`).then(r => r.ok ? r.json() : []).catch(() => []))
+      );
+      const map: Record<string, PublishJob[]> = {};
+      publishedIds.forEach((id, i) => { map[id] = jobLists[i]; });
+      setJobsByArticle(map);
+    }
     setLoading(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const siteName = (id: string) => sites.find(s => s.id === id)?.name ?? 'Unknown site';
 
   function toggleSelect(id: string) {
     setSelected(s => {
@@ -52,23 +77,49 @@ export default function QueueList() {
     setDeleting(false);
   }
 
+  async function quickPublish(article: Article) {
+    if (!article.site_ids.length) {
+      alert('No target sites selected for this article — open it to choose sites first.');
+      return;
+    }
+    if (!confirm(`Publish "${article.title || 'this article'}" now to ${article.site_ids.length} site(s)?`)) return;
+    setPublishingId(article.id);
+    await fetch(`/api/articles/${article.id}/publish`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scheduled_at: null }),
+    });
+    await load();
+    setPublishingId(null);
+  }
+
   if (loading) return <div className="py-20 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Loading…</div>;
 
-  const visible = articles.filter(a => a.status !== 'discarded');
-
-  if (visible.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 rounded-lg border border-dashed" style={{ borderColor: 'var(--border)' }}>
-        <FileText size={32} style={{ color: 'var(--text-dim)' }} className="mb-3" />
-        <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>Queue is empty</p>
-        <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Generate an article to get started</p>
-      </div>
-    );
-  }
+  const active = articles.filter(a => a.status === 'draft' || a.status === 'scheduled');
+  const published = articles.filter(a => a.status === 'published');
+  const visible = tab === 'active' ? active : published;
 
   return (
     <div className="flex flex-col gap-3">
-      {selected.size > 0 && (
+      {/* Tabs */}
+      <div className="flex gap-1 p-1 rounded-lg w-fit" style={{ background: 'var(--surface-2)' }}>
+        <button
+          onClick={() => setTab('active')}
+          className="px-3.5 py-1.5 rounded-md text-xs font-medium transition-colors"
+          style={{ background: tab === 'active' ? 'var(--accent)' : 'transparent', color: tab === 'active' ? 'white' : 'var(--text-muted)' }}
+        >
+          Needs action ({active.length})
+        </button>
+        <button
+          onClick={() => setTab('published')}
+          className="px-3.5 py-1.5 rounded-md text-xs font-medium transition-colors"
+          style={{ background: tab === 'published' ? 'var(--accent)' : 'transparent', color: tab === 'published' ? 'white' : 'var(--text-muted)' }}
+        >
+          Published ({published.length})
+        </button>
+      </div>
+
+      {tab === 'active' && selected.size > 0 && (
         <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg border" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
           <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{selected.size} selected</span>
           <button
@@ -83,52 +134,124 @@ export default function QueueList() {
         </div>
       )}
 
-      <div className="rounded-lg border overflow-hidden" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
-        <table className="w-full text-sm">
-          <thead>
-            <tr style={{ borderBottom: `1px solid var(--border)` }}>
-              <th className="w-8 px-4 py-3" />
-              {['Title', 'Topic', 'Status', 'Created', ''].map(h => (
-                <th key={h} className="px-4 py-3 text-left text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {visible.map(article => (
-              <tr key={article.id} className="border-b last:border-0" style={{ borderColor: 'var(--border-subtle)' }}>
-                <td className="px-4 py-3">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(article.id)}
-                    onChange={() => toggleSelect(article.id)}
-                    className="rounded"
-                    style={{ accentColor: 'var(--accent)' }}
-                  />
-                </td>
-                <td className="px-4 py-3 font-medium max-w-xs" style={{ color: 'var(--text)' }}>
-                  <span className="line-clamp-1">{article.title || <span style={{ color: 'var(--text-dim)' }}>Untitled</span>}</span>
-                </td>
-                <td className="px-4 py-3 text-xs max-w-xs" style={{ color: 'var(--text-muted)' }}>
-                  <span className="line-clamp-1">{article.topic}</span>
-                </td>
-                <td className="px-4 py-3">{statusBadge(article.status)}</td>
-                <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-dim)' }}>
-                  {new Date(article.created_at).toLocaleDateString()}
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <Link
-                    href={`/queue/${article.id}`}
-                    className="text-xs px-2.5 py-1 rounded transition-colors hover:opacity-80"
-                    style={{ background: 'var(--surface-2)', color: 'var(--text-muted)' }}
-                  >
-                    Edit
-                  </Link>
-                </td>
+      {visible.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 rounded-lg border border-dashed" style={{ borderColor: 'var(--border)' }}>
+          <FileText size={32} style={{ color: 'var(--text-dim)' }} className="mb-3" />
+          <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>
+            {tab === 'active' ? 'Nothing needs action' : 'Nothing published yet'}
+          </p>
+          <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+            {tab === 'active' ? 'Generate an article to get started' : 'Published articles will show up here'}
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-lg border overflow-hidden" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ borderBottom: `1px solid var(--border)` }}>
+                {tab === 'active' && <th className="w-8 px-4 py-3" />}
+                {['Title', 'Target sites', 'Status', tab === 'active' ? 'Created' : 'Published', ''].map(h => (
+                  <th key={h} className="px-4 py-3 text-left text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{h}</th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {visible.map(article => (
+                <tr key={article.id} className="border-b last:border-0" style={{ borderColor: 'var(--border-subtle)' }}>
+                  {tab === 'active' && (
+                    <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(article.id)}
+                        onChange={() => toggleSelect(article.id)}
+                        className="rounded"
+                        style={{ accentColor: 'var(--accent)' }}
+                      />
+                    </td>
+                  )}
+                  <td className="px-4 py-3 font-medium max-w-xs" style={{ color: 'var(--text)' }}>
+                    <span className="line-clamp-1">{article.title || <span style={{ color: 'var(--text-dim)' }}>Untitled</span>}</span>
+                    <span className="block text-xs mt-0.5 line-clamp-1" style={{ color: 'var(--text-dim)' }}>{article.topic}</span>
+                  </td>
+                  <td className="px-4 py-3 text-xs max-w-[220px]">
+                    {article.site_ids.length === 0 ? (
+                      <span style={{ color: '#fbbf24' }}>No sites selected</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {article.site_ids.map(id => (
+                          <span key={id} className="px-1.5 py-0.5 rounded text-[10px]" style={{ background: 'var(--surface-2)', color: 'var(--text-muted)' }}>
+                            {siteName(id)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {statusBadge(article.status)}
+                    {article.status === 'scheduled' && article.scheduled_at && (
+                      <span className="flex items-center gap-1 text-xs mt-1" style={{ color: 'var(--text-dim)' }}>
+                        <Clock size={10} /> {new Date(article.scheduled_at).toLocaleString()}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-dim)' }}>
+                    {new Date(tab === 'active' ? article.created_at : (article.published_at ?? article.created_at)).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2 justify-end">
+                      {tab === 'active' ? (
+                        <>
+                          {article.status === 'draft' && (
+                            <button
+                              onClick={() => quickPublish(article)}
+                              disabled={publishingId === article.id}
+                              className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md font-medium transition-opacity hover:opacity-80 disabled:opacity-50"
+                              style={{ background: 'var(--accent)', color: 'white' }}
+                              title={article.site_ids.length ? `Publish to ${article.site_ids.length} site(s)` : 'No sites selected'}
+                            >
+                              {publishingId === article.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                              Publish
+                            </button>
+                          )}
+                          <Link
+                            href={`/queue/${article.id}`}
+                            className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md transition-colors hover:opacity-80"
+                            style={{ background: 'var(--surface-2)', color: 'var(--text-muted)' }}
+                          >
+                            <Pencil size={12} /> Edit
+                          </Link>
+                        </>
+                      ) : (
+                        <>
+                          {(jobsByArticle[article.id] ?? []).filter(j => j.ok && j.postUrl).map(j => (
+                            <a
+                              key={j.siteId}
+                              href={j.postUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md transition-colors hover:opacity-80"
+                              style={{ background: 'var(--surface-2)', color: 'var(--accent-hover)' }}
+                            >
+                              {siteName(j.siteId)} <ExternalLink size={10} />
+                            </a>
+                          ))}
+                          <Link
+                            href={`/queue/${article.id}`}
+                            className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md transition-colors hover:opacity-80"
+                            style={{ background: 'var(--surface-2)', color: 'var(--text-muted)' }}
+                          >
+                            <Pencil size={12} /> View
+                          </Link>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

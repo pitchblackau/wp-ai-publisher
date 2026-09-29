@@ -7,7 +7,7 @@ import { Globe, Sparkles, List, Activity, Zap, LogOut } from 'lucide-react';
 const nav = [
   { href: '/sites', label: 'Sites', icon: Globe },
   { href: '/generate', label: 'Generate', icon: Sparkles },
-  { href: '/queue', label: 'Review Queue', icon: List },
+  { href: '/queue', label: 'Articles', icon: List },
   { href: '/health', label: 'Health', icon: Activity },
 ];
 

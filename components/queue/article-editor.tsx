@@ -20,18 +20,23 @@ export default function ArticleEditor({ id }: Props) {
   const [view, setView] = useState<'preview' | 'html'>('preview');
   const [scheduledAt, setScheduledAt] = useState('');
   const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(null);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
+    setLoading(true);
+    setLoadError('');
     Promise.all([
-      fetch(`/api/articles/${id}`).then(r => r.json()),
-      fetch('/api/sites').then(r => r.json()),
-      fetch(`/api/articles/${id}/jobs`).then(r => r.ok ? r.json() : []).catch(() => []),
-    ]).then(([art, s, j]) => {
-      setArticle(art);
-      setSites(Array.isArray(s) ? s : []);
-      setJobs(Array.isArray(j) ? j : []);
-      setLoading(false);
-    });
+      fetch(`/api/articles/${id}`).then(r => (r.ok ? r.json() : Promise.reject(new Error(`Article fetch failed: ${r.status}`)))),
+      fetch('/api/sites').then(r => r.json()).catch(() => []),
+      fetch(`/api/articles/${id}/jobs`).then(r => (r.ok ? r.json() : [])).catch(() => []),
+    ])
+      .then(([art, s, j]) => {
+        setArticle(art);
+        setSites(Array.isArray(s) ? s : []);
+        setJobs(Array.isArray(j) ? j : []);
+      })
+      .catch(e => setLoadError(e instanceof Error ? e.message : 'Failed to load article'))
+      .finally(() => setLoading(false));
   }, [id]);
 
   async function save() {
@@ -88,6 +93,7 @@ export default function ArticleEditor({ id }: Props) {
   }
 
   if (loading) return <div className="py-20 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Loading…</div>;
+  if (loadError) return <div className="py-20 text-center text-sm" style={{ color: 'var(--error)' }}>{loadError}</div>;
   if (!article) return <div className="py-20 text-center text-sm" style={{ color: 'var(--error)' }}>Article not found</div>;
 
   const statusMap = { draft: 'neutral', scheduled: 'warning', published: 'success', discarded: 'error' } as const;

@@ -7,8 +7,8 @@ export default function QueuePage() {
   return (
     <div className="flex flex-col h-full">
       <PageHeader
-        title="Review Queue"
-        description="Edit and publish AI-generated articles"
+        title="Articles"
+        description="Drafts and scheduled posts need action; published articles move to their own tab"
       />
       <div className="flex-1 overflow-auto p-6">
         <QueueList />
