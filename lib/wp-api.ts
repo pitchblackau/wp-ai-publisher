@@ -204,18 +204,13 @@ export interface WPMediaItem {
 // ── Application Password auth (fallback for sites without plugin) ─────────────
 
 async function tryAuth(url: string, config: WPAuthConfig): Promise<Response> {
-  const res = await fetch(url, {
+  // Note: there used to be a fallback here that put credentials in the URL
+  // (https://user:pass@host/...) for hosts that strip the Authorization header.
+  // Node's fetch (undici) refuses to construct a request from such a URL at all
+  // ("Request cannot be constructed from a URL that includes credentials"),
+  // so it never worked — it just replaced a clean 401 with a confusing crash.
+  return fetch(url, {
     headers: { Authorization: authHeader(config) },
-    redirect: 'follow',
-    signal: AbortSignal.timeout(10000),
-  });
-  if (res.status !== 401) return res;
-
-  // Fallback: credentials in URL for hosts that strip Authorization header
-  const parsed = new URL(url);
-  parsed.username = encodeURIComponent(config.username);
-  parsed.password = encodeURIComponent(config.password);
-  return fetch(parsed.toString(), {
     redirect: 'follow',
     signal: AbortSignal.timeout(10000),
   });
@@ -292,23 +287,12 @@ export async function publishPost(
 ): Promise<{ ok: boolean; postId?: number; postUrl?: string; error?: string }> {
   try {
     const body = JSON.stringify(payload);
-    let res = await fetch(`${baseUrl(config.url)}/wp-json/wp/v2/posts`, {
+    const res = await fetch(`${baseUrl(config.url)}/wp-json/wp/v2/posts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: authHeader(config) },
       body,
       signal: AbortSignal.timeout(30000),
     });
-    if (res.status === 401) {
-      const parsed = new URL(`${baseUrl(config.url)}/wp-json/wp/v2/posts`);
-      parsed.username = encodeURIComponent(config.username);
-      parsed.password = encodeURIComponent(config.password);
-      res = await fetch(parsed.toString(), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body,
-        signal: AbortSignal.timeout(30000),
-      });
-    }
     if (res.ok) {
       const data = await res.json();
       return { ok: true, postId: data.id, postUrl: data.link };
