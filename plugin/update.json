@@ -1,0 +1,7 @@
+{
+  "version": "1.1.0",
+  "download_url": "https://github.com/pitchblackau/wp-ai-publisher/raw/master/plugin/pb-publisher.zip",
+  "requires_wp": "5.6",
+  "tested_wp": "6.6",
+  "changelog": "Added media upload, update/delete posts and pages, site options management, and auto-update support."
+}

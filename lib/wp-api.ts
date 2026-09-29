@@ -47,22 +47,158 @@ export async function publishPostPlugin(
   config: WPPluginConfig,
   payload: WPPostPayload
 ): Promise<{ ok: boolean; postId?: number; postUrl?: string; error?: string }> {
+  return pluginPost(config, '/wp-json/pb-publisher/v1/posts', payload);
+}
+
+export async function updatePostPlugin(
+  config: WPPluginConfig,
+  postId: number,
+  payload: Partial<WPPostPayload>
+): Promise<{ ok: boolean; postId?: number; postUrl?: string; error?: string }> {
+  return pluginPatch(config, `/wp-json/pb-publisher/v1/posts/${postId}`, payload);
+}
+
+export async function deletePostPlugin(
+  config: WPPluginConfig,
+  postId: number
+): Promise<{ ok: boolean; error?: string }> {
+  return pluginDelete(config, `/wp-json/pb-publisher/v1/posts/${postId}`);
+}
+
+export async function listPostsPlugin(
+  config: WPPluginConfig,
+  params?: { status?: string; per_page?: number; page?: number }
+): Promise<{ ok: boolean; posts?: WPPostSummary[]; error?: string }> {
   try {
-    const res = await fetch(`${baseUrl(config.url)}/wp-json/pb-publisher/v1/posts`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-PB-Key': config.pluginKey },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(30000),
-    });
+    const qs = new URLSearchParams(params as Record<string, string>).toString();
+    const res = await pluginFetch(config, `/wp-json/pb-publisher/v1/posts${qs ? `?${qs}` : ''}`, 'GET');
+    if (res.ok) return { ok: true, posts: await res.json() };
+    return { ok: false, error: `${res.status}: ${await res.text()}` };
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+}
+
+export async function createPagePlugin(
+  config: WPPluginConfig,
+  payload: WPPostPayload & { parent_id?: number }
+): Promise<{ ok: boolean; postId?: number; postUrl?: string; error?: string }> {
+  return pluginPost(config, '/wp-json/pb-publisher/v1/pages', payload);
+}
+
+export async function updatePagePlugin(
+  config: WPPluginConfig,
+  pageId: number,
+  payload: Partial<WPPostPayload> & { parent_id?: number }
+): Promise<{ ok: boolean; postId?: number; postUrl?: string; error?: string }> {
+  return pluginPatch(config, `/wp-json/pb-publisher/v1/pages/${pageId}`, payload);
+}
+
+export async function listPagesPlugin(
+  config: WPPluginConfig,
+  params?: { per_page?: number }
+): Promise<{ ok: boolean; pages?: WPPostSummary[]; error?: string }> {
+  try {
+    const qs = new URLSearchParams(params as Record<string, string>).toString();
+    const res = await pluginFetch(config, `/wp-json/pb-publisher/v1/pages${qs ? `?${qs}` : ''}`, 'GET');
+    if (res.ok) return { ok: true, pages: await res.json() };
+    return { ok: false, error: `${res.status}: ${await res.text()}` };
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+}
+
+export async function uploadMediaPlugin(
+  config: WPPluginConfig,
+  payload: {
+    file_data: string;   // base64
+    file_name: string;
+    mime_type?: string;
+    alt_text?: string;
+    caption?: string;
+    post_id?: number;
+  }
+): Promise<{ ok: boolean; attachmentId?: number; url?: string; error?: string }> {
+  try {
+    const res = await pluginFetch(config, '/wp-json/pb-publisher/v1/media', 'POST', payload);
     if (res.ok) {
       const data = await res.json();
-      return { ok: true, postId: data.post_id, postUrl: data.url };
+      return { ok: true, attachmentId: data.attachment_id, url: data.url };
     }
-    const errText = await res.text();
-    return { ok: false, error: `${res.status}: ${errText}` };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
+    return { ok: false, error: `${res.status}: ${await res.text()}` };
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+}
+
+export async function listMediaPlugin(
+  config: WPPluginConfig,
+  params?: { per_page?: number; page?: number }
+): Promise<{ ok: boolean; media?: WPMediaItem[]; error?: string }> {
+  try {
+    const qs = new URLSearchParams(params as Record<string, string>).toString();
+    const res = await pluginFetch(config, `/wp-json/pb-publisher/v1/media${qs ? `?${qs}` : ''}`, 'GET');
+    if (res.ok) return { ok: true, media: await res.json() };
+    return { ok: false, error: `${res.status}: ${await res.text()}` };
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+}
+
+// ── Internal helpers ───────────────────────────────────────────────────────────
+
+function pluginFetch(config: WPPluginConfig, path: string, method: string, body?: unknown): Promise<Response> {
+  return fetch(`${baseUrl(config.url)}${path}`, {
+    method,
+    headers: body
+      ? { 'Content-Type': 'application/json', 'X-PB-Key': config.pluginKey }
+      : { 'X-PB-Key': config.pluginKey },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+    signal: AbortSignal.timeout(30000),
+  });
+}
+
+async function pluginPost(
+  config: WPPluginConfig, path: string, body: unknown
+): Promise<{ ok: boolean; postId?: number; postUrl?: string; error?: string }> {
+  try {
+    const res = await pluginFetch(config, path, 'POST', body);
+    if (res.ok) { const d = await res.json(); return { ok: true, postId: d.post_id, postUrl: d.url }; }
+    return { ok: false, error: `${res.status}: ${await res.text()}` };
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+}
+
+async function pluginPatch(
+  config: WPPluginConfig, path: string, body: unknown
+): Promise<{ ok: boolean; postId?: number; postUrl?: string; error?: string }> {
+  try {
+    const res = await pluginFetch(config, path, 'PATCH', body);
+    if (res.ok) { const d = await res.json(); return { ok: true, postId: d.post_id, postUrl: d.url }; }
+    return { ok: false, error: `${res.status}: ${await res.text()}` };
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+}
+
+async function pluginDelete(
+  config: WPPluginConfig, path: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await pluginFetch(config, path, 'DELETE');
+    if (res.ok) return { ok: true };
+    return { ok: false, error: `${res.status}: ${await res.text()}` };
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+}
+
+export interface WPPostSummary {
+  id: number;
+  title: string;
+  status: string;
+  url: string;
+  date: string;
+  modified: string;
+  excerpt: string;
+  thumbnail: string | null;
+}
+
+export interface WPMediaItem {
+  id: number;
+  url: string;
+  filename: string;
+  mime: string;
+  alt: string;
+  caption: string;
+  date: string;
 }
 
 // ── Application Password auth (fallback for sites without plugin) ─────────────
