@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Save, Send, Clock, Loader2, CheckCircle, AlertCircle, Eye, Code2, ExternalLink, RotateCcw, Trash2, Sparkles } from 'lucide-react';
-import type { Article } from '@/types';
+import { Save, Send, Clock, Loader2, CheckCircle, AlertCircle, Eye, Code2, ExternalLink, RotateCcw, Trash2, Sparkles, ImageIcon, Plus } from 'lucide-react';
+import type { Article, ImagePlanItem } from '@/types';
 import Badge from '@/components/ui/badge';
 import SitePicker from '@/components/sites/site-picker';
 
@@ -19,6 +19,7 @@ export default function ArticleEditor({ id }: Props) {
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [imgBusy, setImgBusy] = useState<number | 'all' | null>(null);
   const [removingSite, setRemovingSite] = useState<string | null>(null);
   const [view, setView] = useState<'preview' | 'html'>('preview');
   const [scheduledAt, setScheduledAt] = useState('');
@@ -55,11 +56,74 @@ export default function ArticleEditor({ id }: Props) {
         tags: article.tags,
         category: article.category,
         site_ids: article.site_ids,
+        image_plan: article.image_plan ?? [],
       }),
     });
     setSaving(false);
     setNotice({ ok: res.ok, message: res.ok ? 'Saved' : 'Save failed' });
     setTimeout(() => setNotice(null), 2000);
+    return res.ok;
+  }
+
+  function updateImage(n: number, patch: Partial<ImagePlanItem>) {
+    if (!article) return;
+    setArticle({ ...article, image_plan: (article.image_plan ?? []).map(p => (p.n === n ? { ...p, ...patch } : p)) });
+  }
+
+  async function generateImages(only?: number[], force = false, base?: Article) {
+    const current = base ?? article;
+    if (!current) return;
+    setImgBusy(only?.length === 1 ? only[0] : 'all');
+    // Persist edits first — the server re-reads the article and the editor reloads from its response.
+    await fetch(`/api/articles/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: current.title, body: current.body, image_plan: current.image_plan ?? [] }),
+    });
+    const res = await fetch(`/api/articles/${id}/images`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ only, force }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setImgBusy(null);
+    if (!res.ok) {
+      setNotice({ ok: false, message: data.error ?? 'Image generation failed' });
+    } else {
+      if (data.article) setArticle(data.article);
+      setNotice(data.failed
+        ? { ok: false, message: `${data.generated} generated, ${data.failed} failed — ${(data.errors ?? []).join(' | ')}` }
+        : { ok: true, message: data.generated ? `${data.generated} image(s) generated` : 'No images needed generating' });
+    }
+    setTimeout(() => setNotice(null), 8000);
+  }
+
+  async function addImage() {
+    if (!article) return;
+    const desc = window.prompt('Describe the image you want (subject, setting, style):');
+    if (!desc?.trim()) return;
+    const plan = article.image_plan ?? [];
+    const n = plan.length ? Math.max(...plan.map(p => p.n)) + 1 : 1;
+    let body = article.body;
+    if (n !== 1) {
+      const marker = `\n[[IMAGE:${n}]]\n`;
+      const at = body.lastIndexOf('<h2');
+      body = at > 0 ? body.slice(0, at) + marker + body.slice(at) : body + marker;
+    }
+    const next: Article = { ...article, body, image_plan: [...plan, { n, prompt: desc.trim(), alt: desc.trim().slice(0, 120), url: null }] };
+    setArticle(next);
+    await generateImages([n], false, next);
+  }
+
+  function removeImage(n: number) {
+    if (!article) return;
+    const item = (article.image_plan ?? []).find(p => p.n === n);
+    let body = article.body.split(`[[IMAGE:${n}]]`).join('');
+    if (item?.url) {
+      const esc = item.url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      body = body.replace(new RegExp(`<figure[^>]*>\\s*<img[^>]*${esc}[^>]*>\\s*</figure>`, 'g'), '');
+    }
+    setArticle({ ...article, body, image_plan: (article.image_plan ?? []).filter(p => p.n !== n) });
   }
 
   async function publish(scheduled?: string) {
@@ -257,7 +321,12 @@ export default function ArticleEditor({ id }: Props) {
           <div
             className="wp-preview w-full px-6 py-5 rounded-md border overflow-auto"
             style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)', minHeight: 400, maxHeight: 600 }}
-            dangerouslySetInnerHTML={{ __html: article.body || '<p style="opacity:.5">No content</p>' }}
+            dangerouslySetInnerHTML={{
+              __html: (article.body || '<p style="opacity:.5">No content</p>').replace(
+                /\[\[IMAGE:(\d+)\]\]/g,
+                '<div style="border:1px dashed #52525b;border-radius:6px;padding:28px;text-align:center;color:#71717a;font-size:12px;margin:1em 0">Image $1 — not generated yet (use the Images panel below)</div>'
+              ),
+            }}
           />
         ) : (
           <textarea
@@ -277,6 +346,96 @@ export default function ArticleEditor({ id }: Props) {
         )}
         <p className="text-xs" style={{ color: 'var(--text-dim)' }}>
           Edit in the HTML tab, then switch back to Preview to see the change — Preview does not auto-save.
+        </p>
+      </div>
+
+      {/* Images */}
+      <div className="flex flex-col gap-3 p-4 rounded-lg border" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+        <div className="flex items-center justify-between">
+          <h3 className="flex items-center gap-2 text-sm font-semibold" style={{ color: 'var(--text)' }}>
+            <ImageIcon size={14} /> Images ({(article.image_plan ?? []).filter(p => p.url).length}/{(article.image_plan ?? []).length} generated)
+          </h3>
+          <div className="flex gap-2">
+            {(article.image_plan ?? []).some(p => !p.url) && (
+              <button
+                onClick={() => generateImages()}
+                disabled={imgBusy !== null}
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md font-medium transition-opacity hover:opacity-80 disabled:opacity-50"
+                style={{ background: 'var(--accent)', color: 'white' }}
+              >
+                {imgBusy === 'all' ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                Generate missing
+              </button>
+            )}
+            <button
+              onClick={addImage}
+              disabled={imgBusy !== null}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md transition-opacity hover:opacity-80 disabled:opacity-50"
+              style={{ background: 'var(--surface-2)', color: 'var(--text-muted)' }}
+            >
+              <Plus size={12} /> Add image
+            </button>
+          </div>
+        </div>
+
+        {(article.image_plan ?? []).length === 0 ? (
+          <p className="text-xs" style={{ color: 'var(--text-dim)' }}>No images yet. Use “Add image” and describe what you want — the first image becomes the featured image, later ones are placed inside the article.</p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {(article.image_plan ?? []).map(p => (
+              <div key={p.n} className="flex gap-3 p-3 rounded-md border" style={{ borderColor: 'var(--border-subtle)', background: 'var(--surface-2)' }}>
+                <div className="w-28 h-20 shrink-0 rounded overflow-hidden flex items-center justify-center text-[10px]" style={{ background: 'var(--bg)', color: 'var(--text-dim)' }}>
+                  {imgBusy === p.n || (imgBusy === 'all' && !p.url)
+                    ? <Loader2 size={16} className="animate-spin" />
+                    // eslint-disable-next-line @next/next/no-img-element
+                    : p.url ? <img src={p.url} alt={p.alt} className="w-full h-full object-cover" /> : 'Not generated'}
+                </div>
+                <div className="flex-1 flex flex-col gap-1.5 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium" style={{ color: 'var(--text)' }}>
+                      Image {p.n} · {p.n === 1 ? 'Featured' : 'In article'}
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => generateImages([p.n], true)}
+                        disabled={imgBusy !== null}
+                        className="flex items-center gap-1 text-xs hover:underline disabled:opacity-50"
+                        style={{ color: 'var(--accent-hover)' }}
+                      >
+                        <RotateCcw size={10} /> {p.url ? 'Regenerate' : 'Generate'}
+                      </button>
+                      <button
+                        onClick={() => removeImage(p.n)}
+                        disabled={imgBusy !== null}
+                        className="flex items-center gap-1 text-xs hover:underline disabled:opacity-50"
+                        style={{ color: '#f87171' }}
+                      >
+                        <Trash2 size={10} /> Remove
+                      </button>
+                    </div>
+                  </div>
+                  <textarea
+                    rows={2}
+                    value={p.prompt}
+                    onChange={e => updateImage(p.n, { prompt: e.target.value })}
+                    placeholder="Image prompt"
+                    className="w-full px-2 py-1 rounded text-xs border outline-none resize-none"
+                    style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}
+                  />
+                  <input
+                    value={p.alt}
+                    onChange={e => updateImage(p.n, { alt: e.target.value })}
+                    placeholder="Alt text"
+                    className="w-full px-2 py-1 rounded text-xs border outline-none"
+                    style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="text-xs" style={{ color: 'var(--text-dim)' }}>
+          Edit a prompt, then Regenerate to replace the picture. Images are uploaded to each site&apos;s media library when you publish; the featured image is set automatically.
         </p>
       </div>
 

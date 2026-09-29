@@ -11,6 +11,12 @@ const UpdateArticleSchema = z.object({
   status: z.enum(['draft', 'scheduled', 'published', 'discarded']).optional(),
   scheduled_at: z.string().nullable().optional(),
   site_ids: z.array(z.string().uuid()).optional(),
+  image_plan: z.array(z.object({
+    n: z.number().int(),
+    prompt: z.string(),
+    alt: z.string(),
+    url: z.string().nullable(),
+  })).optional(),
 });
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
