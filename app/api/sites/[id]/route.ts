@@ -7,6 +7,7 @@ const UpdateSiteSchema = z.object({
   name: z.string().min(1).optional(),
   url: z.string().url().optional(),
   login_url: z.string().optional(),
+  auth_mode: z.enum(['plugin', 'apppassword']).optional(),
   plugin_key: z.string().optional(),
   wp_username: z.string().min(1).optional(),
   wp_password: z.string().min(1).optional(),
@@ -27,6 +28,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (parsed.data.plugin_key) updates.plugin_key_encrypted = encrypt(parsed.data.plugin_key);
   if (parsed.data.wp_username) updates.wp_username = parsed.data.wp_username;
   if (parsed.data.wp_password) updates.wp_password_encrypted = encrypt(parsed.data.wp_password.replace(/\s/g, ''));
+
+  // Switching auth mode explicitly clears the other credential type so site-test picks the intended one.
+  if (parsed.data.auth_mode === 'apppassword' && !parsed.data.plugin_key) {
+    updates.plugin_key_encrypted = null;
+  }
 
   const { data, error } = await supabase
     .from('sites')

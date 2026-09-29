@@ -4,12 +4,15 @@ import { useEffect, useState, useCallback } from 'react';
 import { Globe, RefreshCw, Trash2, ExternalLink, Pencil, X, Check, Loader2 } from 'lucide-react';
 import Badge from '@/components/ui/badge';
 
+type AuthMode = 'plugin' | 'apppassword';
+
 interface Site {
   id: string;
   name: string;
   url: string;
   login_url: string | null;
-  wp_username: string;
+  plugin_key_encrypted: string | null;
+  wp_username: string | null;
   status: 'active' | 'error' | 'unchecked';
   last_checked_at: string | null;
   last_error: string | null;
@@ -19,6 +22,8 @@ interface EditForm {
   name: string;
   url: string;
   login_url: string;
+  auth_mode: AuthMode;
+  plugin_key: string;
   wp_username: string;
   wp_password: string;
 }
@@ -35,7 +40,7 @@ export default function SiteList() {
   const [testing, setTesting] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<EditForm>({ name: '', url: '', login_url: '', wp_username: '', wp_password: '' });
+  const [editForm, setEditForm] = useState<EditForm>({ name: '', url: '', login_url: '', auth_mode: 'plugin', plugin_key: '', wp_username: '', wp_password: '' });
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -53,7 +58,15 @@ export default function SiteList() {
   }, [load]);
 
   function openEdit(site: Site) {
-    setEditForm({ name: site.name, url: site.url, login_url: site.login_url ?? '', wp_username: site.wp_username, wp_password: '' });
+    setEditForm({
+      name: site.name,
+      url: site.url,
+      login_url: site.login_url ?? '',
+      auth_mode: site.plugin_key_encrypted ? 'plugin' : 'apppassword',
+      plugin_key: '',
+      wp_username: site.wp_username ?? '',
+      wp_password: '',
+    });
     setEditingId(site.id);
   }
 
@@ -64,9 +77,14 @@ export default function SiteList() {
       name: editForm.name,
       url: editForm.url,
       login_url: editForm.login_url,
-      wp_username: editForm.wp_username,
+      auth_mode: editForm.auth_mode,
     };
-    if (editForm.wp_password) body.wp_password = editForm.wp_password;
+    if (editForm.auth_mode === 'plugin') {
+      if (editForm.plugin_key) body.plugin_key = editForm.plugin_key;
+    } else {
+      body.wp_username = editForm.wp_username;
+      if (editForm.wp_password) body.wp_password = editForm.wp_password;
+    }
     await fetch(`/api/sites/${editingId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -75,6 +93,7 @@ export default function SiteList() {
     setSaving(false);
     setEditingId(null);
     await load();
+    await testSite(editingId);
   }
 
   async function testSite(id: string) {
@@ -189,29 +208,65 @@ export default function SiteList() {
                   ) : <span style={{ color: 'var(--text-dim)' }}>—</span>}
                 </td>
 
-                {/* Username */}
+                {/* Username / Auth */}
                 <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-muted)' }}>
                   {isEditing ? (
-                    <input
-                      value={editForm.wp_username}
-                      onChange={e => setEditForm({ ...editForm, wp_username: e.target.value })}
-                      className="px-2 py-1 rounded border text-xs w-full outline-none"
-                      style={inputStyle}
-                    />
-                  ) : site.wp_username}
+                    <div className="flex flex-col gap-1.5 min-w-[160px]">
+                      <div className="flex gap-1">
+                        {(['plugin', 'apppassword'] as AuthMode[]).map(mode => (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() => setEditForm({ ...editForm, auth_mode: mode })}
+                            className="flex-1 py-1 rounded text-[10px] font-medium transition-colors"
+                            style={{
+                              background: editForm.auth_mode === mode ? 'var(--accent)' : 'var(--surface-2)',
+                              color: editForm.auth_mode === mode ? 'white' : 'var(--text-muted)',
+                              border: '1px solid var(--border)',
+                            }}
+                          >
+                            {mode === 'plugin' ? 'Plugin Key' : 'App Password'}
+                          </button>
+                        ))}
+                      </div>
+                      {editForm.auth_mode === 'plugin' ? (
+                        <input
+                          value={editForm.plugin_key}
+                          onChange={e => setEditForm({ ...editForm, plugin_key: e.target.value })}
+                          placeholder="Paste new key (leave blank to keep)"
+                          className="px-2 py-1 rounded border text-xs w-full outline-none"
+                          style={inputStyle}
+                        />
+                      ) : (
+                        <input
+                          value={editForm.wp_username}
+                          onChange={e => setEditForm({ ...editForm, wp_username: e.target.value })}
+                          placeholder="WP username"
+                          className="px-2 py-1 rounded border text-xs w-full outline-none"
+                          style={inputStyle}
+                        />
+                      )}
+                    </div>
+                  ) : (
+                    site.plugin_key_encrypted ? <span style={{ color: 'var(--accent-hover)' }}>Plugin Key</span> : (site.wp_username ?? '—')
+                  )}
                 </td>
 
                 {/* Status */}
                 <td className="px-4 py-3">
                   {isEditing ? (
-                    <input
-                      value={editForm.wp_password}
-                      onChange={e => setEditForm({ ...editForm, wp_password: e.target.value })}
-                      type="password"
-                      placeholder="New password (leave blank to keep)"
-                      className="px-2 py-1 rounded border text-xs w-40 outline-none"
-                      style={inputStyle}
-                    />
+                    editForm.auth_mode === 'apppassword' ? (
+                      <input
+                        value={editForm.wp_password}
+                        onChange={e => setEditForm({ ...editForm, wp_password: e.target.value })}
+                        type="password"
+                        placeholder="New password (leave blank to keep)"
+                        className="px-2 py-1 rounded border text-xs w-40 outline-none"
+                        style={inputStyle}
+                      />
+                    ) : (
+                      <span className="text-xs" style={{ color: 'var(--text-dim)' }}>Leave key blank to keep current</span>
+                    )
                   ) : (
                     <>
                       {statusBadge(site.status)}
