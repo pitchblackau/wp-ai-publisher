@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { FileText, Trash2, Send, Loader2, Pencil, Clock, ExternalLink, RotateCcw } from 'lucide-react';
+import { FileText, Trash2, Send, Loader2, Pencil, Clock, ExternalLink, RotateCcw, AlertCircle, CheckCircle } from 'lucide-react';
 import Badge from '@/components/ui/badge';
 import type { Article } from '@/types';
 
@@ -31,6 +31,7 @@ export default function QueueList() {
   const [deleting, setDeleting] = useState(false);
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [redoingId, setRedoingId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -85,21 +86,49 @@ export default function QueueList() {
     }
     if (!confirm(`Publish "${article.title || 'this article'}" now to ${article.site_ids.length} site(s)?`)) return;
     setPublishingId(article.id);
-    await fetch(`/api/articles/${article.id}/publish`, {
+    setNotice(null);
+    const res = await fetch(`/api/articles/${article.id}/publish`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ scheduled_at: null }),
     });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setNotice({ ok: false, message: data.error ?? `Publish failed (${res.status})` });
+    } else if (data.jobs) {
+      const failed = data.jobs.filter((j: { ok: boolean }) => !j.ok);
+      if (failed.length) {
+        const detail = failed.map((j: { siteId: string; error?: string }) => `${siteName(j.siteId)}: ${j.error ?? 'failed'}`).join(' | ');
+        setNotice({ ok: data.anyOk, message: data.anyOk ? `Published, but ${failed.length} site(s) failed — ${detail}` : `Failed on every site — ${detail}` });
+      } else {
+        setNotice({ ok: true, message: 'Published successfully' });
+      }
+    }
     await load();
     setPublishingId(null);
+    setTimeout(() => setNotice(null), 8000);
   }
 
   async function deleteAndRedo(article: Article) {
     if (!confirm(`Remove "${article.title || 'this article'}" from every published site and move it back to draft? This cannot be undone on the WordPress side.`)) return;
     setRedoingId(article.id);
-    await fetch(`/api/articles/${article.id}/publish`, { method: 'DELETE' });
+    setNotice(null);
+    const res = await fetch(`/api/articles/${article.id}/publish`, { method: 'DELETE' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setNotice({ ok: false, message: data.error ?? `Could not remove the post (${res.status}) — it is still live and still shows as Published` });
+    } else {
+      const failed = (data.results ?? []).filter((r: { ok: boolean }) => !r.ok);
+      if (failed.length) {
+        const detail = failed.map((r: { siteId: string; error?: string }) => `${siteName(r.siteId)}: ${r.error ?? 'failed'}`).join(' | ');
+        setNotice({ ok: false, message: `Could not remove from ${failed.length} site(s) — it will stay Published until this is fixed. ${detail}` });
+      } else {
+        setNotice({ ok: true, message: 'Removed from all sites — back to draft' });
+      }
+    }
     await load();
     setRedoingId(null);
+    setTimeout(() => setNotice(null), 10000);
   }
 
   if (loading) return <div className="py-20 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Loading…</div>;
@@ -127,6 +156,16 @@ export default function QueueList() {
           Published ({published.length})
         </button>
       </div>
+
+      {notice && (
+        <div
+          className="flex items-start gap-2 px-4 py-2.5 rounded-lg border text-xs"
+          style={{ background: notice.ok ? '#15803d15' : '#ef444415', borderColor: notice.ok ? '#15803d40' : '#ef444440', color: notice.ok ? '#4ade80' : '#f87171' }}
+        >
+          {notice.ok ? <CheckCircle size={14} className="mt-0.5 shrink-0" /> : <AlertCircle size={14} className="mt-0.5 shrink-0" />}
+          <span>{notice.message}</span>
+        </div>
+      )}
 
       {tab === 'active' && selected.size > 0 && (
         <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg border" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>

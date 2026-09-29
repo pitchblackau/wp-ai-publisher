@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Sparkles, Loader2, CheckCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import SitePicker from '@/components/sites/site-picker';
 
 interface Site { id: string; name: string; url: string; status: string; }
 
@@ -35,13 +36,6 @@ export default function GenerateForm() {
   useEffect(() => {
     fetch('/api/sites').then(r => r.json()).then(data => setSites(Array.isArray(data) ? data : []));
   }, []);
-
-  function toggleSite(id: string) {
-    setForm(f => ({
-      ...f,
-      site_ids: f.site_ids.includes(id) ? f.site_ids.filter(s => s !== id) : [...f.site_ids, id],
-    }));
-  }
 
   const selectedSites = sites.filter(s => form.site_ids.includes(s.id));
   const linkSiteId = selectedSites.some(s => s.id === form.crosslink_site_id) ? form.crosslink_site_id : (selectedSites[0]?.id ?? '');
@@ -110,31 +104,7 @@ export default function GenerateForm() {
 
         <div className="flex flex-col gap-2">
           <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Target sites</label>
-          {sites.length === 0 ? (
-            <p className="text-xs" style={{ color: 'var(--text-dim)' }}>No sites added yet — add sites in the Sites tab first.</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {sites.map(site => {
-                const selected = form.site_ids.includes(site.id);
-                return (
-                  <button
-                    key={site.id}
-                    type="button"
-                    onClick={() => toggleSite(site.id)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border transition-all"
-                    style={{
-                      background: selected ? '#6366f120' : 'var(--surface)',
-                      borderColor: selected ? 'var(--accent)' : 'var(--border)',
-                      color: selected ? 'var(--accent-hover)' : 'var(--text-muted)',
-                    }}
-                  >
-                    {site.name}
-                    {site.status === 'active' && <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--success)' }} />}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          <SitePicker sites={sites} selected={form.site_ids} onChange={ids => setForm({ ...form, site_ids: ids })} />
         </div>
 
         <div className="grid grid-cols-2 gap-4">

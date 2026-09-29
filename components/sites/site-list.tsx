@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Globe, RefreshCw, Trash2, ExternalLink, Pencil, X, Check, Loader2 } from 'lucide-react';
+import { Globe, RefreshCw, Trash2, ExternalLink, Pencil, X, Check, Loader2, Search, AlertTriangle } from 'lucide-react';
 import Badge from '@/components/ui/badge';
 
 type AuthMode = 'plugin' | 'apppassword';
@@ -42,6 +42,7 @@ export default function SiteList() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditForm>({ name: '', url: '', login_url: '', auth_mode: 'plugin', plugin_key: '', wp_username: '', wp_password: '' });
   const [saving, setSaving] = useState(false);
+  const [query, setQuery] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -103,9 +104,23 @@ export default function SiteList() {
     setTesting(null);
   }
 
-  async function deleteSite(id: string) {
-    if (!confirm('Delete this site? This cannot be undone.')) return;
+  async function deleteSite(id: string, name: string) {
     setDeleting(id);
+    const articles: { id: string; status: string; site_ids: string[] }[] = await fetch('/api/articles')
+      .then(r => r.json()).catch(() => []);
+    const referencing = (Array.isArray(articles) ? articles : []).filter(
+      a => a.status !== 'discarded' && a.site_ids?.includes(id)
+    );
+    const publishedCount = referencing.filter(a => a.status === 'published').length;
+
+    let message = `Delete "${name}"? This cannot be undone.`;
+    if (referencing.length) {
+      message = `"${name}" is referenced by ${referencing.length} article(s)` +
+        (publishedCount ? `, including ${publishedCount} already published there — deleting the site will NOT remove those live posts from WordPress, they'll just become unmanageable from here.` : '.') +
+        ` Delete the site anyway?`;
+    }
+    if (!confirm(message)) { setDeleting(null); return; }
+
     await fetch(`/api/sites/${id}`, { method: 'DELETE' });
     await load();
     setDeleting(null);
@@ -135,8 +150,33 @@ export default function SiteList() {
     color: 'var(--text)',
   };
 
+  const filtered = query
+    ? sites.filter(s => s.name.toLowerCase().includes(query.toLowerCase()) || s.url.toLowerCase().includes(query.toLowerCase()))
+    : sites;
+  const errorCount = sites.filter(s => s.status === 'error').length;
+
   return (
-    <div className="rounded-lg border overflow-hidden" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border w-full max-w-xs" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
+          <Search size={13} style={{ color: 'var(--text-dim)' }} />
+          <input
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder={`Search ${sites.length} sites…`}
+            className="flex-1 bg-transparent text-xs outline-none"
+            style={{ color: 'var(--text)' }}
+          />
+        </div>
+        {errorCount > 0 && (
+          <span className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--error)' }}>
+            <AlertTriangle size={13} />
+            {errorCount} site(s) with connection errors
+          </span>
+        )}
+      </div>
+
+      <div className="rounded-lg border overflow-hidden" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
       <table className="w-full text-sm">
         <thead>
           <tr style={{ borderBottom: `1px solid var(--border)` }}>
@@ -148,7 +188,10 @@ export default function SiteList() {
           </tr>
         </thead>
         <tbody>
-          {sites.map((site, i) => {
+          {filtered.length === 0 && (
+            <tr><td colSpan={8} className="px-4 py-8 text-center text-xs" style={{ color: 'var(--text-dim)' }}>No sites match &quot;{query}&quot;</td></tr>
+          )}
+          {filtered.map((site, i) => {
             const isEditing = editingId === site.id;
             return (
               <tr key={site.id} className="border-b last:border-0" style={{ borderColor: 'var(--border-subtle)' }}>
@@ -325,7 +368,7 @@ export default function SiteList() {
                           <RefreshCw size={13} className={testing === site.id ? 'animate-spin' : ''} />
                         </button>
                         <button
-                          onClick={() => deleteSite(site.id)}
+                          onClick={() => deleteSite(site.id, site.name)}
                           disabled={deleting === site.id}
                           className="p-1.5 rounded transition-colors hover:opacity-80 disabled:opacity-40"
                           style={{ color: 'var(--error)', background: '#ef444415' }}
@@ -342,6 +385,7 @@ export default function SiteList() {
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

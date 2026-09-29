@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Save, Send, Clock, Loader2, CheckCircle, AlertCircle, Eye, Code2, ExternalLink, RotateCcw, Trash2, Sparkles } from 'lucide-react';
 import type { Article } from '@/types';
 import Badge from '@/components/ui/badge';
+import SitePicker from '@/components/sites/site-picker';
 
 interface Site { id: string; name: string; url: string; }
 interface PublishJob { siteId: string; ok: boolean; postId?: number; postUrl?: string; error?: string; }
@@ -143,14 +144,6 @@ export default function ArticleEditor({ id }: Props) {
       setNotice({ ok: false, message: data.error ?? 'Failed to remove' });
     }
     setTimeout(() => setNotice(null), 4000);
-  }
-
-  function toggleSite(siteId: string) {
-    if (!article) return;
-    const ids = article.site_ids.includes(siteId)
-      ? article.site_ids.filter(s => s !== siteId)
-      : [...article.site_ids, siteId];
-    setArticle({ ...article, site_ids: ids });
   }
 
   if (loading) return <div className="py-20 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Loading…</div>;
@@ -315,31 +308,8 @@ export default function ArticleEditor({ id }: Props) {
 
         <div className="flex flex-col gap-2">
           <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Target sites</label>
-          {sites.length === 0 ? (
-            <p className="text-xs" style={{ color: 'var(--error)' }}>No sites configured — add one in the Sites tab first.</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {sites.map(site => {
-                const selected = article.site_ids.includes(site.id);
-                return (
-                  <button
-                    key={site.id}
-                    type="button"
-                    onClick={() => toggleSite(site.id)}
-                    className="text-xs px-3 py-1.5 rounded-md border transition-all"
-                    style={{
-                      background: selected ? '#6366f120' : 'var(--surface-2)',
-                      borderColor: selected ? 'var(--accent)' : 'var(--border)',
-                      color: selected ? 'var(--accent-hover)' : 'var(--text-muted)',
-                    }}
-                  >
-                    {site.name}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          {!article.site_ids.length && (
+          <SitePicker sites={sites} selected={article.site_ids} onChange={ids => setArticle({ ...article, site_ids: ids })} />
+          {!article.site_ids.length && sites.length > 0 && (
             <p className="text-xs" style={{ color: '#fbbf24' }}>Select at least one site to enable publishing.</p>
           )}
         </div>
