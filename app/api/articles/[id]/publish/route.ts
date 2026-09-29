@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { decrypt } from '@/lib/crypto';
-import { publishPost } from '@/lib/wp-api';
+import { publishArticleToSite } from '@/lib/publish';
+
+export const maxDuration = 300;
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -18,40 +19,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { data: sites, error: siteErr } = await supabase
     .from('sites')
-    .select('id, url, wp_username, wp_password_encrypted')
+    .select('id, url, plugin_key_encrypted, wp_username, wp_password_encrypted')
     .in('id', article.site_ids);
 
   if (siteErr || !sites?.length) return NextResponse.json({ error: 'Sites not found' }, { status: 404 });
 
   const isScheduled = !!scheduled_at;
-  const wpStatus = isScheduled ? 'future' : 'publish';
   const jobs = [];
 
   for (const site of sites) {
-    let password: string;
-    try {
-      password = decrypt(site.wp_password_encrypted);
-    } catch {
-      jobs.push({ siteId: site.id, ok: false, error: 'Decrypt failed' });
-      continue;
-    }
-
-    const meta: Record<string, string> = {};
-    if (article.meta_description) {
-      meta['_yoast_wpseo_metadesc'] = article.meta_description;
-      meta['rank_math_description'] = article.meta_description;
-    }
-
-    const result = await publishPost(
-      { url: site.url, username: site.wp_username, password },
-      {
-        title: article.title,
-        content: article.body,
-        status: wpStatus,
-        date: isScheduled ? scheduled_at : undefined,
-        meta,
-      }
-    );
+    const result = await publishArticleToSite(site, article, {
+      status: isScheduled ? 'future' : 'publish',
+      date: isScheduled ? scheduled_at : undefined,
+    });
 
     await supabase.from('publish_jobs').insert({
       article_id: id,
@@ -66,8 +46,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     jobs.push({ siteId: site.id, ...result });
   }
 
-  const allOk = jobs.every((j) => j.ok);
   const anyOk = jobs.some((j) => j.ok);
+  const allOk = jobs.every((j) => j.ok);
 
   await supabase
     .from('articles')

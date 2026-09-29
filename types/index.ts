@@ -4,8 +4,8 @@ export interface Site {
   url: string;
   login_url: string | null;
   plugin_key_encrypted: string | null;
-  wp_username: string;
-  wp_password_encrypted: string;
+  wp_username: string | null;
+  wp_password_encrypted: string | null;
   status: 'active' | 'error' | 'unchecked';
   last_checked_at: string | null;
   last_error: string | null;
@@ -13,8 +13,16 @@ export interface Site {
   updated_at: string;
 }
 
+export interface ImagePlanItem {
+  n: number;
+  prompt: string;
+  alt: string;
+  url: string | null;
+}
+
 export interface Article {
   id: string;
+  image_plan: ImagePlanItem[];
   site_ids: string[];
   title: string;
   body: string;
@@ -48,4 +56,8 @@ export interface GenerateArticleInput {
   site_ids: string[];
   tone: string;
   word_count_target: number;
+  image_count: number;
+  image_style: string;
+  crosslink_site_id: string | null;
+  crosslink_max: number;
 }

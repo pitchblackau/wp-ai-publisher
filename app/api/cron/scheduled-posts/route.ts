@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { decrypt } from '@/lib/crypto';
-import { publishPost } from '@/lib/wp-api';
+import { publishArticleToSite } from '@/lib/publish';
+
+export const maxDuration = 300;
 
 export async function GET(req: NextRequest) {
   if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -26,29 +27,13 @@ export async function GET(req: NextRequest) {
 
     const { data: sites } = await supabase
       .from('sites')
-      .select('id, url, wp_username, wp_password_encrypted')
+      .select('id, url, plugin_key_encrypted, wp_username, wp_password_encrypted')
       .in('id', article.site_ids);
 
     if (!sites?.length) continue;
 
     for (const site of sites) {
-      let password: string;
-      try {
-        password = decrypt(site.wp_password_encrypted);
-      } catch {
-        continue;
-      }
-
-      const meta: Record<string, string> = {};
-      if (article.meta_description) {
-        meta['_yoast_wpseo_metadesc'] = article.meta_description;
-        meta['rank_math_description'] = article.meta_description;
-      }
-
-      const result = await publishPost(
-        { url: site.url, username: site.wp_username, password },
-        { title: article.title, content: article.body, status: 'publish', meta }
-      );
+      const result = await publishArticleToSite(site, article, { status: 'publish' });
 
       await supabase.from('publish_jobs').insert({
         article_id: article.id,

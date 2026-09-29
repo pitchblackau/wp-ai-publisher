@@ -283,6 +283,7 @@ export interface WPPostPayload {
   meta_description?: string;
   tags?: string[];
   category?: string;
+  featured_image_id?: number;
 }
 
 export async function publishPost(
