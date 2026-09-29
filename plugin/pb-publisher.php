@@ -1,8 +1,8 @@
-<?php
+﻿<?php
 /**
  * Plugin Name: Pitch Black Publisher
  * Plugin URI:  https://pitchblack.au
- * Description: Secure REST API bridge for WP AI Publisher — manage posts, pages, media and site content remotely.
+ * Description: Secure REST API bridge for WP AI Publisher â€” manage posts, pages, media and site content remotely.
  * Version:     1.1.0
  * Author:      Pitch Black
  * License:     GPL-2.0-or-later
@@ -15,7 +15,7 @@ define( 'PB_PUBLISHER_VERSION',    '1.1.0' );
 define( 'PB_PUBLISHER_KEY_OPTION', 'pb_publisher_secret_key' );
 define( 'PB_PUBLISHER_UPDATE_URL', 'https://raw.githubusercontent.com/pitchblackau/wp-ai-publisher/master/plugin/update.json' );
 
-// ─── Activation ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Activation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 register_activation_hook( __FILE__, 'pb_publisher_activate' );
 function pb_publisher_activate() {
@@ -24,7 +24,7 @@ function pb_publisher_activate() {
     }
 }
 
-// ─── Auth helper ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Auth helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function pb_publisher_auth( WP_REST_Request $request ): bool {
     $stored = get_option( PB_PUBLISHER_KEY_OPTION );
@@ -33,7 +33,7 @@ function pb_publisher_auth( WP_REST_Request $request ): bool {
     return $provided && hash_equals( $stored, $provided );
 }
 
-// ─── REST API ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ REST API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 add_action( 'rest_api_init', 'pb_publisher_register_routes' );
 function pb_publisher_register_routes(): void {
@@ -66,7 +66,7 @@ function pb_publisher_register_routes(): void {
     register_rest_route( $ns, '/options',       [ 'methods' => 'PATCH',  'callback' => 'pb_publisher_set_options',  'permission_callback' => $auth ] );
 }
 
-// ─── Status ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function pb_publisher_status(): WP_REST_Response {
     global $wp_version;
@@ -79,7 +79,7 @@ function pb_publisher_status(): WP_REST_Response {
     ] );
 }
 
-// ─── Posts ───────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Posts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function pb_publisher_list_posts( WP_REST_Request $req ): WP_REST_Response {
     $args = [
@@ -92,7 +92,7 @@ function pb_publisher_list_posts( WP_REST_Request $req ): WP_REST_Response {
     return rest_ensure_response( array_map( 'pb_publisher_format_post', $posts ) );
 }
 
-function pb_publisher_get_post( WP_REST_Request $req ): WP_REST_Response|WP_Error {
+function pb_publisher_get_post( WP_REST_Request $req ) {
     $post = get_post( (int) $req->get_param( 'id' ) );
     if ( ! $post || $post->post_type !== 'post' ) {
         return new WP_Error( 'not_found', 'Post not found', [ 'status' => 404 ] );
@@ -100,22 +100,22 @@ function pb_publisher_get_post( WP_REST_Request $req ): WP_REST_Response|WP_Erro
     return rest_ensure_response( pb_publisher_format_post( $post ) );
 }
 
-function pb_publisher_create_post( WP_REST_Request $req ): WP_REST_Response|WP_Error {
+function pb_publisher_create_post( WP_REST_Request $req ) {
     return pb_publisher_insert_or_update_post( 0, $req->get_json_params(), 'post' );
 }
 
-function pb_publisher_update_post( WP_REST_Request $req ): WP_REST_Response|WP_Error {
+function pb_publisher_update_post( WP_REST_Request $req ) {
     return pb_publisher_insert_or_update_post( (int) $req->get_param( 'id' ), $req->get_json_params(), 'post' );
 }
 
-function pb_publisher_delete_post( WP_REST_Request $req ): WP_REST_Response|WP_Error {
+function pb_publisher_delete_post( WP_REST_Request $req ) {
     $id     = (int) $req->get_param( 'id' );
     $result = wp_delete_post( $id, true );
     if ( ! $result ) return new WP_Error( 'delete_failed', 'Could not delete post', [ 'status' => 500 ] );
     return rest_ensure_response( [ 'ok' => true, 'deleted_id' => $id ] );
 }
 
-// ─── Pages ───────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Pages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function pb_publisher_list_pages( WP_REST_Request $req ): WP_REST_Response {
     $pages = get_pages( [
@@ -125,24 +125,24 @@ function pb_publisher_list_pages( WP_REST_Request $req ): WP_REST_Response {
     return rest_ensure_response( array_map( 'pb_publisher_format_post', $pages ?: [] ) );
 }
 
-function pb_publisher_create_page( WP_REST_Request $req ): WP_REST_Response|WP_Error {
+function pb_publisher_create_page( WP_REST_Request $req ) {
     return pb_publisher_insert_or_update_post( 0, $req->get_json_params(), 'page' );
 }
 
-function pb_publisher_update_page( WP_REST_Request $req ): WP_REST_Response|WP_Error {
+function pb_publisher_update_page( WP_REST_Request $req ) {
     return pb_publisher_insert_or_update_post( (int) $req->get_param( 'id' ), $req->get_json_params(), 'page' );
 }
 
-function pb_publisher_delete_page( WP_REST_Request $req ): WP_REST_Response|WP_Error {
+function pb_publisher_delete_page( WP_REST_Request $req ) {
     $id     = (int) $req->get_param( 'id' );
     $result = wp_delete_post( $id, true );
     if ( ! $result ) return new WP_Error( 'delete_failed', 'Could not delete page', [ 'status' => 500 ] );
     return rest_ensure_response( [ 'ok' => true, 'deleted_id' => $id ] );
 }
 
-// ─── Shared post/page upsert ──────────────────────────────────────────────────
+// â”€â”€â”€ Shared post/page upsert â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-function pb_publisher_insert_or_update_post( int $existing_id, array $p, string $post_type ): WP_REST_Response|WP_Error {
+function pb_publisher_insert_or_update_post( int $existing_id, array $p, string $post_type ) {
     $data = [ 'post_type' => $post_type ];
 
     if ( $existing_id ) $data['ID'] = $existing_id;
@@ -218,7 +218,7 @@ function pb_publisher_format_post( WP_Post $post ): array {
     ];
 }
 
-// ─── Media ───────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Media â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function pb_publisher_list_media( WP_REST_Request $req ): WP_REST_Response {
     $media = get_posts( [
@@ -240,7 +240,7 @@ function pb_publisher_list_media( WP_REST_Request $req ): WP_REST_Response {
     }, $media ) );
 }
 
-function pb_publisher_upload_media( WP_REST_Request $req ): WP_REST_Response|WP_Error {
+function pb_publisher_upload_media( WP_REST_Request $req ) {
     $p = $req->get_json_params();
 
     if ( empty( $p['file_data'] ) || empty( $p['file_name'] ) ) {
@@ -292,14 +292,14 @@ function pb_publisher_upload_media( WP_REST_Request $req ): WP_REST_Response|WP_
     ] );
 }
 
-function pb_publisher_delete_media( WP_REST_Request $req ): WP_REST_Response|WP_Error {
+function pb_publisher_delete_media( WP_REST_Request $req ) {
     $id     = (int) $req->get_param( 'id' );
     $result = wp_delete_attachment( $id, true );
     if ( ! $result ) return new WP_Error( 'delete_failed', 'Could not delete attachment', [ 'status' => 500 ] );
     return rest_ensure_response( [ 'ok' => true, 'deleted_id' => $id ] );
 }
 
-// ─── Site Options ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Site Options â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /** Allowlisted options safe to read/write remotely */
 const PB_ALLOWED_OPTIONS = [
@@ -327,7 +327,7 @@ function pb_publisher_set_options( WP_REST_Request $req ): WP_REST_Response {
     return rest_ensure_response( [ 'ok' => true, 'updated' => $updated ] );
 }
 
-// ─── Auto-update ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Auto-update â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 add_filter( 'pre_set_site_transient_update_plugins', 'pb_publisher_check_updates' );
 function pb_publisher_check_updates( $transient ) {
@@ -380,7 +380,7 @@ function pb_publisher_plugin_info( $result, $action, $args ) {
     ];
 }
 
-// ─── Admin settings page ──────────────────────────────────────────────────────
+// â”€â”€â”€ Admin settings page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 add_action( 'admin_menu', 'pb_publisher_admin_menu' );
 function pb_publisher_admin_menu(): void {
@@ -420,7 +420,7 @@ function pb_publisher_settings_page(): void {
             </tr>
             <tr>
                 <th>Plugin version</th>
-                <td><?php echo PB_PUBLISHER_VERSION; ?> — <a href="https://github.com/pitchblackau/wp-ai-publisher/tree/master/plugin" target="_blank">changelog</a></td>
+                <td><?php echo PB_PUBLISHER_VERSION; ?> â€” <a href="https://github.com/pitchblackau/wp-ai-publisher/tree/master/plugin" target="_blank">changelog</a></td>
             </tr>
         </table>
 
