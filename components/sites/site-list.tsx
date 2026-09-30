@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Globe, RefreshCw, Trash2, ExternalLink, Pencil, X, Check, Loader2, Search, AlertTriangle } from 'lucide-react';
 import Badge from '@/components/ui/badge';
 
@@ -53,6 +53,7 @@ export default function SiteList() {
   const [editForm, setEditForm] = useState<EditForm>({ name: '', url: '', login_url: '', auth_mode: 'plugin', plugin_key: '', wp_username: '', wp_password: '' });
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState('');
+  const versionsChecked = useRef(false);
   const [latest, setLatest] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [bulkUpdating, setBulkUpdating] = useState(false);
@@ -75,6 +76,23 @@ export default function SiteList() {
     window.addEventListener('sites-updated', load);
     return () => window.removeEventListener('sites-updated', load);
   }, [load]);
+
+  // Plugin versions are only recorded when a site is tested — fill in any that are unknown, once per visit.
+  useEffect(() => {
+    if (versionsChecked.current || loading) return;
+    const unknown = sites.filter(s => s.plugin_key_encrypted && !s.plugin_version);
+    versionsChecked.current = true;
+    if (!unknown.length) return;
+    (async () => {
+      const queue = [...unknown];
+      await Promise.all(Array.from({ length: 4 }, async () => {
+        for (let s = queue.shift(); s; s = queue.shift()) {
+          await fetch(`/api/sites/${s.id}/test`, { method: 'POST' }).catch(() => {});
+        }
+      }));
+      await load();
+    })();
+  }, [sites, loading, load]);
 
   function openEdit(site: Site) {
     setEditForm({

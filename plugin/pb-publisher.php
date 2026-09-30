@@ -3,7 +3,7 @@
  * Plugin Name: Pitch Black Publisher
  * Plugin URI:  https://pitchblack.au
  * Description: Secure REST API bridge for WP AI Publisher â€” manage posts, pages, media and site content remotely.
- * Version:     1.2.0
+ * Version:     1.2.1
  * Author:      Pitch Black
  * License:     GPL-2.0-or-later
  * Update URI:  https://raw.githubusercontent.com/pitchblackau/wp-ai-publisher/master/plugin/update.json
@@ -11,7 +11,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'PB_PUBLISHER_VERSION',    '1.2.0' );
+define( 'PB_PUBLISHER_VERSION',    '1.2.1' );
 define( 'PB_PUBLISHER_KEY_OPTION', 'pb_publisher_secret_key' );
 define( 'PB_PUBLISHER_UPDATE_URL', 'https://raw.githubusercontent.com/pitchblackau/wp-ai-publisher/master/plugin/update.json' );
 
