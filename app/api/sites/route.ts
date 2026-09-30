@@ -19,7 +19,7 @@ const CreateSiteSchema = z.object({
 export async function GET() {
   const { data, error } = await supabase
     .from('sites')
-    .select('id, name, url, login_url, plugin_key_encrypted, wp_username, status, last_checked_at, last_error, created_at, updated_at')
+    .select('id, name, url, login_url, plugin_key_encrypted, plugin_version, wp_username, status, last_checked_at, last_error, created_at, updated_at')
     .order('created_at', { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
   const wp_username = parsed.data.wp_username ?? '';
   const wp_password = (parsed.data.wp_password ?? '').replace(/\s/g, '');
 
-  let test: { ok: boolean; message: string };
+  let test: { ok: boolean; message: string; version?: string };
   let insert: Record<string, unknown> = {
     name,
     url,
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
 
   if (plugin_key) {
     test = await testConnectionPlugin({ url, pluginKey: plugin_key });
-    insert = { ...insert, plugin_key_encrypted: encrypt(plugin_key), wp_username: null, wp_password_encrypted: null };
+    insert = { ...insert, plugin_key_encrypted: encrypt(plugin_key), wp_username: null, wp_password_encrypted: null, plugin_version: test.version ?? null };
   } else {
     test = await testConnection({ url, username: wp_username, password: wp_password });
     insert = { ...insert, plugin_key_encrypted: null, wp_username, wp_password_encrypted: encrypt(wp_password) };
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
   const { data, error } = await supabase
     .from('sites')
     .insert(insert)
-    .select('id, name, url, login_url, plugin_key_encrypted, wp_username, status, last_checked_at, last_error, created_at, updated_at')
+    .select('id, name, url, login_url, plugin_key_encrypted, plugin_version, wp_username, status, last_checked_at, last_error, created_at, updated_at')
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

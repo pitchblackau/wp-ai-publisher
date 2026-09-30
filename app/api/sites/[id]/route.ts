@@ -38,7 +38,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .from('sites')
     .update(updates)
     .eq('id', id)
-    .select('id, name, url, login_url, plugin_key_encrypted, wp_username, status, last_checked_at, last_error, created_at, updated_at')
+    .select('id, name, url, login_url, plugin_key_encrypted, plugin_version, wp_username, status, last_checked_at, last_error, created_at, updated_at')
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

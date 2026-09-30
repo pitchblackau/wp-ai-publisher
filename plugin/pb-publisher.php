@@ -3,7 +3,7 @@
  * Plugin Name: Pitch Black Publisher
  * Plugin URI:  https://pitchblack.au
  * Description: Secure REST API bridge for WP AI Publisher â€” manage posts, pages, media and site content remotely.
- * Version:     1.1.2
+ * Version:     1.2.0
  * Author:      Pitch Black
  * License:     GPL-2.0-or-later
  * Update URI:  https://raw.githubusercontent.com/pitchblackau/wp-ai-publisher/master/plugin/update.json
@@ -11,7 +11,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'PB_PUBLISHER_VERSION',    '1.1.2' );
+define( 'PB_PUBLISHER_VERSION',    '1.2.0' );
 define( 'PB_PUBLISHER_KEY_OPTION', 'pb_publisher_secret_key' );
 define( 'PB_PUBLISHER_UPDATE_URL', 'https://raw.githubusercontent.com/pitchblackau/wp-ai-publisher/master/plugin/update.json' );
 
@@ -42,6 +42,10 @@ function pb_publisher_register_routes(): void {
 
     // Status
     register_rest_route( $ns, '/status', [ 'methods' => 'GET', 'callback' => 'pb_publisher_status', 'permission_callback' => $auth ] );
+
+    // Runs WordPress's own updater for this plugin only. Takes no parameters — the download
+    // source is always PB_PUBLISHER_UPDATE_URL, never something supplied by the caller.
+    register_rest_route( $ns, '/update-now', [ 'methods' => 'POST', 'callback' => 'pb_publisher_update_now', 'permission_callback' => $auth ] );
 
     // Posts
     register_rest_route( $ns, '/posts',         [ 'methods' => 'GET',    'callback' => 'pb_publisher_list_posts',   'permission_callback' => $auth ] );
@@ -82,14 +86,18 @@ function pb_publisher_status(): WP_REST_Response {
 // â”€â”€â”€ Posts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function pb_publisher_list_posts( WP_REST_Request $req ): WP_REST_Response {
+    $with_content = (bool) $req->get_param( 'include_content' );
     $args = [
         'post_type'      => 'post',
         'post_status'    => $req->get_param( 'status' ) ?: 'any',
-        'posts_per_page' => min( (int) ( $req->get_param( 'per_page' ) ?: 20 ), 100 ),
+        // Bodies are large — keep pages small when they are included.
+        'posts_per_page' => min( (int) ( $req->get_param( 'per_page' ) ?: 20 ), $with_content ? 25 : 100 ),
         'paged'          => max( 1, (int) ( $req->get_param( 'page' ) ?: 1 ) ),
     ];
     $posts = get_posts( $args );
-    return rest_ensure_response( array_map( 'pb_publisher_format_post', $posts ) );
+    return rest_ensure_response( array_map( function( $p ) use ( $with_content ) {
+        return pb_publisher_format_post( $p, $with_content );
+    }, $posts ) );
 }
 
 function pb_publisher_get_post( WP_REST_Request $req ) {
@@ -97,7 +105,7 @@ function pb_publisher_get_post( WP_REST_Request $req ) {
     if ( ! $post || $post->post_type !== 'post' ) {
         return new WP_Error( 'not_found', 'Post not found', [ 'status' => 404 ] );
     }
-    return rest_ensure_response( pb_publisher_format_post( $post ) );
+    return rest_ensure_response( pb_publisher_format_post( $post, true ) );
 }
 
 function pb_publisher_create_post( WP_REST_Request $req ) {
@@ -149,7 +157,9 @@ function pb_publisher_insert_or_update_post( int $existing_id, array $p, string 
 
     if ( $existing_id ) $data['ID'] = $existing_id;
     if ( isset( $p['title'] ) )   $data['post_title']   = sanitize_text_field( $p['title'] );
-    if ( isset( $p['content'] ) ) $data['post_content']  = wp_kses_post( $p['content'] );
+    // Existing posts are edited as-is (raw_content): kses would strip embeds/inline styles that are already there.
+    // New/generated content keeps the kses filter.
+    if ( isset( $p['content'] ) ) $data['post_content']  = ( $existing_id && ! empty( $p['raw_content'] ) ) ? $p['content'] : wp_kses_post( $p['content'] );
     if ( isset( $p['excerpt'] ) ) $data['post_excerpt']  = sanitize_text_field( $p['excerpt'] );
     if ( isset( $p['status'] ) && in_array( $p['status'], [ 'publish', 'draft', 'future', 'pending', 'private' ], true ) ) {
         $data['post_status'] = $p['status'];
@@ -184,6 +194,8 @@ function pb_publisher_insert_or_update_post( int $existing_id, array $p, string 
         }
     }
 
+    // wp_insert_post()/wp_update_post() expect slashed data and strip one level of backslashes.
+    $data    = wp_slash( $data );
     $post_id = $existing_id ? wp_update_post( $data, true ) : wp_insert_post( $data, true );
 
     if ( is_wp_error( $post_id ) ) {
@@ -221,8 +233,8 @@ function pb_publisher_insert_or_update_post( int $existing_id, array $p, string 
     ] );
 }
 
-function pb_publisher_format_post( WP_Post $post ): array {
-    return [
+function pb_publisher_format_post( WP_Post $post, bool $with_content = false ): array {
+    $out = [
         'id'         => $post->ID,
         'title'      => $post->post_title,
         'status'     => $post->post_status,
@@ -232,6 +244,12 @@ function pb_publisher_format_post( WP_Post $post ): array {
         'excerpt'    => $post->post_excerpt,
         'thumbnail'  => get_the_post_thumbnail_url( $post->ID, 'full' ) ?: null,
     ];
+    if ( $with_content ) {
+        $out['content'] = $post->post_content;
+        // Elementor renders from its own meta, so editing post_content would not change the page.
+        $out['builder'] = get_post_meta( $post->ID, '_elementor_data', true ) ? 'elementor' : null;
+    }
+    return $out;
 }
 
 // â”€â”€â”€ Media â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -344,6 +362,42 @@ function pb_publisher_set_options( WP_REST_Request $req ): WP_REST_Response {
 }
 
 // â”€â”€â”€ Auto-update â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+// Opt this plugin in to WordPress automatic updates (WP 5.5+), regardless of the per-plugin toggle.
+add_filter( 'auto_update_plugin', 'pb_publisher_force_auto_update', 10, 2 );
+function pb_publisher_force_auto_update( $update, $item ) {
+    if ( isset( $item->plugin ) && $item->plugin === plugin_basename( __FILE__ ) ) return true;
+    return $update;
+}
+
+// Don't email the site admin about this plugin's routine updates (other plugins' emails are untouched).
+add_filter( 'auto_plugin_update_send_email', 'pb_publisher_quiet_update_email', 10, 2 );
+function pb_publisher_quiet_update_email( $send, $results = [] ) {
+    if ( empty( $results ) || ! is_array( $results ) ) return $send;
+    foreach ( $results as $r ) {
+        if ( ! isset( $r->item->plugin ) || $r->item->plugin !== plugin_basename( __FILE__ ) ) return $send;
+    }
+    return false;
+}
+
+function pb_publisher_update_now() {
+    $before = PB_PUBLISHER_VERSION;
+
+    delete_site_transient( 'update_plugins' );
+    if ( function_exists( 'wp_update_plugins' ) ) wp_update_plugins();
+    if ( function_exists( 'wp_maybe_auto_update' ) ) wp_maybe_auto_update();
+
+    // The old code is still running, so read the version from the file on disk.
+    $file  = get_file_data( __FILE__, [ 'Version' => 'Version' ] );
+    $after = $file['Version'] ?: $before;
+
+    return rest_ensure_response( [
+        'ok'               => true,
+        'previous_version' => $before,
+        'version'          => $after,
+        'updated'          => version_compare( $after, $before, '>' ),
+    ] );
+}
 
 add_filter( 'pre_set_site_transient_update_plugins', 'pb_publisher_check_updates' );
 function pb_publisher_check_updates( $transient ) {

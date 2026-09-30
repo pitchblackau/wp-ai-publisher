@@ -1,7 +1,7 @@
 {
-  "version": "1.1.2",
-  "download_url": "https://github.com/pitchblackau/wp-ai-publisher/releases/download/plugin-v1.1.2/pb-publisher.zip",
+  "version": "1.2.0",
+  "download_url": "https://github.com/pitchblackau/wp-ai-publisher/releases/download/plugin-v1.2.0/pb-publisher.zip",
   "requires_wp": "5.6",
   "tested_wp": "6.6",
-  "changelog": "Delete/remove-post endpoints now trash posts instead of force-deleting them. A hard delete triggers more WordPress cleanup hooks, and on some sites (a conflicting plugin or theme) that crashes the site with a PHP fatal error. Trashing is gentler and reversible."
+  "changelog": "Posts can now be read with their content (for the internal-links tool) and edited without stripping existing markup. Adds remote 'update now' and opts the plugin in to WordPress automatic updates so the dashboard can keep every site current. Fixes backslashes being stripped from post content on save."
 }

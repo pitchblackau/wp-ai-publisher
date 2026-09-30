@@ -12,6 +12,7 @@ interface Site {
   url: string;
   login_url: string | null;
   plugin_key_encrypted: string | null;
+  plugin_version: string | null;
   wp_username: string | null;
   status: 'active' | 'error' | 'unchecked';
   last_checked_at: string | null;
@@ -26,6 +27,15 @@ interface EditForm {
   plugin_key: string;
   wp_username: string;
   wp_password: string;
+}
+
+function versionCmp(a: string, b: string): number {
+  const pa = a.split('.').map(Number), pb = b.split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d;
+  }
+  return 0;
 }
 
 function statusBadge(status: Site['status']) {
@@ -43,6 +53,10 @@ export default function SiteList() {
   const [editForm, setEditForm] = useState<EditForm>({ name: '', url: '', login_url: '', auth_mode: 'plugin', plugin_key: '', wp_username: '', wp_password: '' });
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState('');
+  const [latest, setLatest] = useState<string | null>(null);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [bulkUpdating, setBulkUpdating] = useState(false);
+  const [updateNote, setUpdateNote] = useState<{ ok: boolean; message: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -50,6 +64,10 @@ export default function SiteList() {
     const data = await res.json();
     setSites(Array.isArray(data) ? data : []);
     setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/plugin/latest').then(r => r.json()).then(d => setLatest(d.version ?? null)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -102,6 +120,45 @@ export default function SiteList() {
     await fetch(`/api/sites/${id}/test`, { method: 'POST' });
     await load();
     setTesting(null);
+  }
+
+  const isOutdated = (s: Site) =>
+    !!s.plugin_key_encrypted && !!latest && (!s.plugin_version || versionCmp(s.plugin_version, latest) < 0);
+
+  async function updateOne(id: string): Promise<{ ok: boolean; message: string; manual?: boolean }> {
+    const data = await fetch(`/api/sites/${id}/update-plugin`, { method: 'POST' }).then(r => r.json()).catch(() => ({ ok: false, error: 'Request failed' }));
+    if (!data.ok) return { ok: false, message: data.error ?? 'Update failed', manual: /older plugin/.test(data.error ?? '') };
+    return { ok: true, message: data.updated ? `Updated to v${data.version}` : `Already on v${data.version}` };
+  }
+
+  async function updatePlugin(site: Site) {
+    setUpdatingId(site.id);
+    const r = await updateOne(site.id);
+    setUpdateNote({ ok: r.ok, message: `${site.name}: ${r.message}` });
+    await load();
+    setUpdatingId(null);
+  }
+
+  async function updateAllOutdated() {
+    const targets = sites.filter(isOutdated);
+    if (!targets.length) return;
+    if (!confirm(`Update the plugin on ${targets.length} site(s) to v${latest}?`)) return;
+    setBulkUpdating(true);
+    setUpdateNote(null);
+    let done = 0; const manual: string[] = []; const failed: string[] = [];
+    const queue = [...targets];
+    await Promise.all(Array.from({ length: 4 }, async () => {
+      for (let s = queue.shift(); s; s = queue.shift()) {
+        const r = await updateOne(s.id);
+        if (r.ok) done++; else if (r.manual) manual.push(s.name); else failed.push(`${s.name} (${r.message})`);
+      }
+    }));
+    await load();
+    setBulkUpdating(false);
+    const parts = [`${done} updated`];
+    if (manual.length) parts.push(`${manual.length} need a one-time manual ZIP upload: ${manual.join(', ')}`);
+    if (failed.length) parts.push(`${failed.length} failed: ${failed.join('; ')}`);
+    setUpdateNote({ ok: !manual.length && !failed.length, message: parts.join(' — ') });
   }
 
   async function deleteSite(id: string, name: string) {
@@ -168,6 +225,17 @@ export default function SiteList() {
             style={{ color: 'var(--text)' }}
           />
         </div>
+        {sites.some(isOutdated) && (
+          <button
+            onClick={updateAllOutdated}
+            disabled={bulkUpdating}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md font-medium hover:opacity-80 disabled:opacity-50"
+            style={{ background: 'var(--accent)', color: 'white' }}
+          >
+            {bulkUpdating ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+            Update {sites.filter(isOutdated).length} outdated plugin(s)
+          </button>
+        )}
         {errorCount > 0 && (
           <span className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--error)' }}>
             <AlertTriangle size={13} />
@@ -176,11 +244,17 @@ export default function SiteList() {
         )}
       </div>
 
+      {updateNote && (
+        <div className="px-4 py-2.5 rounded-lg border text-xs" style={{ background: updateNote.ok ? '#15803d15' : '#f59e0b15', borderColor: updateNote.ok ? '#15803d40' : '#f59e0b40', color: updateNote.ok ? '#4ade80' : '#fbbf24' }}>
+          {updateNote.message}
+        </div>
+      )}
+
       <div className="rounded-lg border overflow-hidden" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
       <table className="w-full text-sm">
         <thead>
           <tr style={{ borderBottom: `1px solid var(--border)` }}>
-            {['No.', 'Name', 'URL', 'Login URL', 'Username', 'Status', 'Last checked', ''].map((h) => (
+            {['No.', 'Name', 'URL', 'Login URL', 'Username', 'Plugin', 'Status', 'Last checked', ''].map((h) => (
               <th key={h} className="px-4 py-3 text-left text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
                 {h}
               </th>
@@ -189,7 +263,7 @@ export default function SiteList() {
         </thead>
         <tbody>
           {filtered.length === 0 && (
-            <tr><td colSpan={8} className="px-4 py-8 text-center text-xs" style={{ color: 'var(--text-dim)' }}>No sites match &quot;{query}&quot;</td></tr>
+            <tr><td colSpan={9} className="px-4 py-8 text-center text-xs" style={{ color: 'var(--text-dim)' }}>No sites match &quot;{query}&quot;</td></tr>
           )}
           {filtered.map((site, i) => {
             const isEditing = editingId === site.id;
@@ -292,6 +366,29 @@ export default function SiteList() {
                     </div>
                   ) : (
                     site.plugin_key_encrypted ? <span style={{ color: 'var(--accent-hover)' }}>Plugin Key</span> : (site.wp_username ?? '—')
+                  )}
+                </td>
+
+                {/* Plugin version */}
+                <td className="px-4 py-3 text-xs">
+                  {!site.plugin_key_encrypted ? (
+                    <span style={{ color: 'var(--text-dim)' }}>—</span>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span style={{ color: isOutdated(site) ? '#fbbf24' : 'var(--text-muted)' }}>
+                        {site.plugin_version ? `v${site.plugin_version}` : 'unknown'}
+                      </span>
+                      {isOutdated(site) && (
+                        <button
+                          onClick={() => updatePlugin(site)}
+                          disabled={updatingId === site.id || bulkUpdating}
+                          className="px-2 py-0.5 rounded text-[10px] font-medium hover:opacity-80 disabled:opacity-50"
+                          style={{ background: 'var(--accent)', color: 'white' }}
+                        >
+                          {updatingId === site.id ? 'Updating…' : `Update to v${latest}`}
+                        </button>
+                      )}
+                    </div>
                   )}
                 </td>
 

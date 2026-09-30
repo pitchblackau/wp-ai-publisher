@@ -19,7 +19,7 @@ function baseUrl(url: string): string {
 
 // ── Plugin-based auth (pb-publisher plugin) ───────────────────────────────────
 
-export async function testConnectionPlugin(config: WPPluginConfig): Promise<{ ok: boolean; message: string }> {
+export async function testConnectionPlugin(config: WPPluginConfig): Promise<{ ok: boolean; message: string; version?: string }> {
   try {
     const res = await fetch(`${baseUrl(config.url)}/wp-json/pb-publisher/v1/status`, {
       headers: { 'X-PB-Key': config.pluginKey },
@@ -28,7 +28,7 @@ export async function testConnectionPlugin(config: WPPluginConfig): Promise<{ ok
 
     if (res.ok) {
       const data = await res.json();
-      return { ok: true, message: `Connected to "${data.site_name}"` };
+      return { ok: true, message: `Connected to "${data.site_name}"`, version: data.pb_version };
     }
     if (res.status === 401 || res.status === 403) {
       return { ok: false, message: 'Invalid plugin key — check the key under WP Admin → Settings → PB Publisher' };
@@ -97,9 +97,42 @@ export async function postPresence(config: WPAuthConfig, postId: number): Promis
   } catch { return 'unknown'; }
 }
 
+// Runs WordPress's own updater for the plugin on that site (source is fixed inside the plugin).
+export async function updatePluginNow(
+  config: WPPluginConfig
+): Promise<{ ok: boolean; updated?: boolean; version?: string; previous?: string; unsupported?: boolean; error?: string }> {
+  try {
+    const res = await pluginFetch(config, '/wp-json/pb-publisher/v1/update-now', 'POST', {});
+    if (res.ok) {
+      const d = await res.json();
+      return { ok: true, updated: d.updated, version: d.version, previous: d.previous_version };
+    }
+    if (res.status === 404) return { ok: false, unsupported: true, error: 'Plugin is too old for remote updates' };
+    return { ok: false, error: await summarizeWpError(res) };
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+}
+
+export async function getPostPlugin(
+  config: WPPluginConfig, postId: number
+): Promise<{ ok: boolean; post?: WPPostSummary; error?: string }> {
+  try {
+    const res = await pluginFetch(config, `/wp-json/pb-publisher/v1/posts/${postId}`, 'GET');
+    if (res.ok) return { ok: true, post: await res.json() };
+    return { ok: false, error: await summarizeWpError(res) };
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+}
+
+// Replaces the body of an existing post exactly as given (no kses filtering); WordPress keeps a revision.
+export async function updatePostContentPlugin(
+  config: WPPluginConfig, postId: number, content: string
+): Promise<{ ok: boolean; error?: string }> {
+  const r = await pluginPatch(config, `/wp-json/pb-publisher/v1/posts/${postId}`, { content, raw_content: true });
+  return { ok: r.ok, error: r.error };
+}
+
 export async function listPostsPlugin(
   config: WPPluginConfig,
-  params?: { status?: string; per_page?: number; page?: number }
+  params?: { status?: string; per_page?: number; page?: number; include_content?: number }
 ): Promise<{ ok: boolean; posts?: WPPostSummary[]; error?: string }> {
   try {
     const qs = new URLSearchParams(params as Record<string, string>).toString();
@@ -236,6 +269,8 @@ export interface WPPostSummary {
   modified: string;
   excerpt: string;
   thumbnail: string | null;
+  content?: string;
+  builder?: string | null;
 }
 
 export interface WPMediaItem {

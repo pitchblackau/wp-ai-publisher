@@ -14,7 +14,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 
   if (error || !site) return NextResponse.json({ error: 'Site not found' }, { status: 404 });
 
-  let result: { ok: boolean; message: string };
+  let result: { ok: boolean; message: string; version?: string };
   try {
     if (site.plugin_key_encrypted) {
       result = await testConnectionPlugin({ url: site.url, pluginKey: decrypt(site.plugin_key_encrypted) });
@@ -33,6 +33,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       status: result.ok ? 'active' : 'error',
       last_checked_at: new Date().toISOString(),
       last_error: result.ok ? null : result.message,
+      ...(result.version ? { plugin_version: result.version } : {}),
     })
     .eq('id', id);
 

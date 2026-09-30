@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Globe, Sparkles, List, Activity, Zap, LogOut } from 'lucide-react';
+import { Globe, Sparkles, List, Activity, Zap, LogOut, Link2 } from 'lucide-react';
 
 const nav = [
   { href: '/sites', label: 'Sites', icon: Globe },
   { href: '/generate', label: 'Generate', icon: Sparkles },
   { href: '/queue', label: 'Articles', icon: List },
+  { href: '/links', label: 'Internal links', icon: Link2 },
   { href: '/health', label: 'Health', icon: Activity },
 ];
 
