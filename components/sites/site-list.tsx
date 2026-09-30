@@ -80,7 +80,8 @@ export default function SiteList() {
   // Plugin versions are only recorded when a site is tested — fill in any that are unknown, once per visit.
   useEffect(() => {
     if (versionsChecked.current || loading) return;
-    const unknown = sites.filter(s => s.plugin_key_encrypted && !s.plugin_version);
+    const staleMs = 10 * 60 * 1000;
+    const unknown = sites.filter(s => s.plugin_key_encrypted && (!s.plugin_version || !s.last_checked_at || Date.now() - new Date(s.last_checked_at).getTime() > staleMs));
     versionsChecked.current = true;
     if (!unknown.length) return;
     (async () => {
@@ -145,8 +146,8 @@ export default function SiteList() {
 
   async function updateOne(id: string): Promise<{ ok: boolean; message: string; manual?: boolean }> {
     const data = await fetch(`/api/sites/${id}/update-plugin`, { method: 'POST' }).then(r => r.json()).catch(() => ({ ok: false, error: 'Request failed' }));
-    if (!data.ok) return { ok: false, message: data.error ?? 'Update failed', manual: /older plugin/.test(data.error ?? '') };
-    return { ok: true, message: data.updated ? `Updated to v${data.version}` : `Already on v${data.version}` };
+    if (!data.ok) return { ok: false, message: data.error ?? 'Update failed', manual: /cannot update itself/.test(data.error ?? '') };
+    return { ok: true, message: data.message ?? (data.updated ? `Updated to v${data.version}` : `Already on v${data.version}`) };
   }
 
   async function updatePlugin(site: Site) {
